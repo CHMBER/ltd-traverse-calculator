@@ -16,5 +16,7 @@ No build step. Just open `index.html` in a browser, or on a phone:
 See `CLAUDE.md` for full context on what's built, conventions used, and what's next
 (this file is written for Claude Code to read on startup, but useful for any contributor).
 
-Top of the "next steps" list: **persistence**. Right now nothing is saved between
-sessions — that's the priority before this is field-ready.
+Job data now auto-saves to the browser's `localStorage` and survives a refresh — use
+the header's **NEW JOB** button to clear it and start over. Top of the "next steps"
+list now: JSON export/import (to back up or move a job between devices) and a real
+PWA manifest/service worker for offline installs.

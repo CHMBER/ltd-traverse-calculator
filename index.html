@@ -5,12 +5,47 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
 <title>Traverse Field Book</title>
 <style>
+  :root {
+    /* Brand: navy + yellow/gold + metallic silver */
+    --navy: #1B3B6F;
+    --navy-deep: #0F2038;
+    --yellow: #FFC220;
+    --yellow-dark: #E6A812;
+    --silver: #C9D0D8;
+    --silver-dim: #93A0AC;
+    --accent: var(--yellow);
+    --accent-active: var(--yellow-dark);
+    --accent-2: var(--silver);
+
+    /* Neutrals */
+    --bg: #10141B;
+    --header-bg: #171C24;
+    --panel-bg: #1A2029;
+    --panel-border: #29323D;
+    --surface-2: #242C36;
+    --surface-2-border: #333D46;
+    --input-bg: #0C1016;
+    --input-border: #2A3542;
+    --row-border: #232B35;
+    --compass-bg: #0F1216;
+    --compass-tick: #3A434D;
+
+    /* Text */
+    --text-primary: #EDEFF2;
+    --text-secondary: #8FA0AE;
+    --text-dim: #5B6672;
+    --text-data: #DADEE3;
+
+    /* Status (semantic, not brand — left as-is on purpose) */
+    --good: #5FD068;
+    --bad: #FF6B6B;
+  }
   @font-face { font-family: 'Space Grotesk'; src: local('Space Grotesk'); }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body {
     margin: 0; padding: 0; height: 100%;
-    background: #14181C;
-    color: #EDEFF2;
+    background: var(--bg);
+    color: var(--text-primary);
     font-family: -apple-system, 'Inter', system-ui, sans-serif;
     overscroll-behavior: none;
     user-select: none;
@@ -19,18 +54,20 @@
   #app { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
 
   /* ---- Header ---- */
+  .brand-strip { height: 3px; flex-shrink: 0; background: linear-gradient(90deg, var(--navy) 0%, var(--yellow) 55%, var(--silver) 100%); }
   header {
     padding: 14px 16px 10px;
-    background: #1A1F24;
-    border-bottom: 1px solid #262E35;
+    background: var(--header-bg);
+    border-bottom: 1px solid var(--panel-border);
     flex-shrink: 0;
   }
   header h1 {
     font-family: 'Space Grotesk', sans-serif;
     font-size: 17px; font-weight: 700; letter-spacing: 0.02em;
-    margin: 0 0 2px 0; color: #EDEFF2;
+    margin: 0 0 2px 0; color: var(--text-primary);
   }
-  .status-row { display: flex; align-items: center; gap: 8px; font-size: 11px; color: #8A93A0; }
+  .status-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 11px; color: var(--text-secondary); }
+  .status-left { display: flex; align-items: center; gap: 8px; }
   .badge {
     display: inline-flex; align-items: center; gap: 5px;
     padding: 3px 8px; border-radius: 20px; font-size: 10.5px; font-weight: 600;
@@ -41,111 +78,132 @@
   .badge.bad { background: rgba(255,85,85,0.12); color: #FF6B6B; border: 1px solid rgba(255,85,85,0.3); }
   .badge.neu { background: rgba(138,147,160,0.12); color: #8A93A0; border: 1px solid rgba(138,147,160,0.25); }
   .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  #save-indicator {
+    font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 600;
+    color: var(--accent-2); letter-spacing: 0.04em; opacity: 0; transition: opacity 0.35s ease;
+  }
+  #save-indicator.show { opacity: 1; }
+  .btn-reset {
+    background: transparent; color: var(--text-secondary); border: 1px solid var(--input-border);
+    font-family: 'Space Grotesk', sans-serif; font-weight: 700; letter-spacing: 0.03em;
+    font-size: 10px; padding: 5px 10px; border-radius: 20px; cursor: pointer;
+  }
+  .btn-reset:active { color: var(--bad); border-color: var(--bad); }
 
   /* ---- Main scroll area ---- */
   main { flex: 1; overflow-y: auto; padding: 14px 14px 90px; }
   .panel {
-    background: #1E252B; border: 1px solid #262E35; border-radius: 14px;
+    background: var(--panel-bg); border: 1px solid var(--panel-border); border-radius: 14px;
     padding: 14px; margin-bottom: 12px;
   }
   .panel-title {
     font-family: 'Space Grotesk', sans-serif;
     font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
-    color: #FF7A1A; margin: 0 0 10px 0;
+    color: var(--accent); margin: 0 0 10px 0;
   }
+  .panel-title-sm { font-size: 11px; margin-top: 2px; }
   .row { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; }
   .row > * { flex: 1; }
-  label.f { font-size: 10.5px; color: #8A93A0; display: block; margin-bottom: 4px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+  label.f { font-size: 10.5px; color: var(--text-secondary); display: block; margin-bottom: 4px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+  .checkbox-row { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-data); }
+  .checkbox-row input[type="checkbox"] { width: auto; }
   input, select {
-    width: 100%; background: #14181C; border: 1px solid #2A323A; color: #EDEFF2;
+    width: 100%; background: var(--input-bg); border: 1px solid var(--input-border); color: var(--text-primary);
     padding: 10px 8px; border-radius: 8px; font-size: 15px; font-family: 'JetBrains Mono', monospace;
     outline: none;
   }
-  input:focus, select:focus { border-color: #FF7A1A; }
+  input:focus, select:focus { border-color: var(--accent); }
   select { font-family: inherit; -webkit-appearance: none; appearance: none;
     background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6'><path d='M0 0l5 6 5-6z' fill='%238A93A0'/></svg>");
     background-repeat: no-repeat; background-position: right 10px center; padding-right: 26px;
   }
   .bearing-input { font-size: 20px; text-align: center; letter-spacing: 0.03em; padding: 12px 8px; }
+  .bearing-input-sm { font-size: 15px; }
   .bearing-preview {
     text-align: center; font-family: 'JetBrains Mono', monospace; font-size: 15px;
-    color: #4FD1C5; font-weight: 700; min-height: 20px; margin-top: 6px; letter-spacing: 0.02em;
+    color: var(--accent-2); font-weight: 700; min-height: 20px; margin-top: 6px; letter-spacing: 0.02em;
   }
-  .bearing-preview.pending { color: #5C6570; font-weight: 500; font-size: 12px; }
+  .bearing-preview.pending { color: var(--text-dim); font-weight: 500; font-size: 12px; }
+  .preview-sm { font-size: 11px; }
 
   button {
     font-family: 'Space Grotesk', sans-serif; font-weight: 700; letter-spacing: 0.02em;
     border: none; border-radius: 10px; padding: 12px; font-size: 14px; cursor: pointer;
   }
-  .btn-primary { background: #FF7A1A; color: #14181C; width: 100%; }
-  .btn-primary:active { background: #E56A0E; }
-  .btn-secondary { background: #262E35; color: #EDEFF2; border: 1px solid #333D46; }
-  .btn-ghost { background: transparent; color: #8A93A0; border: 1px solid #2A323A; }
-  tr.editing-row td { background: rgba(255,122,26,0.08); color: #FF7A1A; }
+  .btn-primary { background: var(--accent); color: var(--navy-deep); width: 100%; }
+  .btn-primary:active { background: var(--accent-active); }
+  .btn-secondary { background: var(--surface-2); color: var(--text-primary); border: 1px solid var(--surface-2-border); }
+  .btn-ghost { background: transparent; color: var(--text-secondary); border: 1px solid var(--input-border); }
+  tr.editing-row td { background: rgba(255,194,32,0.08); color: var(--accent); }
   .row-actions { display: flex; gap: 2px; justify-content: flex-end; }
-  .btn-icon-ghost { background: transparent; border: none; padding: 4px 7px; font-size: 13px; color: #4FD1C5; }
-  .btn-icon-ghost.danger { color: #FF6B6B; }
+  .btn-icon-ghost { background: transparent; border: none; padding: 6px 9px; font-size: 14px; color: var(--accent-2); }
+  .btn-icon-ghost.danger { color: var(--bad); }
 
   table { width: 100%; border-collapse: collapse; font-family: 'JetBrains Mono', monospace; font-size: 12.5px; }
-  th { text-align: right; color: #8A93A0; font-weight: 600; font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; padding: 4px 6px; border-bottom: 1px solid #2A323A; }
+  th { text-align: right; color: var(--text-secondary); font-weight: 600; font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; padding: 4px 6px; border-bottom: 1px solid var(--input-border); }
   th:first-child, td:first-child { text-align: left; }
-  td { text-align: right; padding: 7px 6px; border-bottom: 1px solid #1E252B; color: #DADEE3; }
+  td { text-align: right; padding: 7px 6px; border-bottom: 1px solid var(--row-border); color: var(--text-data); }
   tr:last-child td { border-bottom: none; }
-  tfoot td { border-top: 1px solid #2A323A; border-bottom: none; color: #EDEFF2; }
-  .leg-name { color: #4FD1C5; font-weight: 700; }
+  tfoot td { border-top: 1px solid var(--input-border); border-bottom: none; color: var(--text-primary); }
+  .leg-name { color: var(--accent-2); font-weight: 700; }
 
   .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   .stat {
-    background: #14181C; border: 1px solid #2A323A; border-radius: 10px; padding: 10px;
+    background: var(--input-bg); border: 1px solid var(--input-border); border-radius: 10px; padding: 10px;
   }
-  .stat-label { font-size: 10px; color: #8A93A0; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
-  .stat-val { font-family: 'JetBrains Mono', monospace; font-size: 16px; font-weight: 700; color: #EDEFF2; }
-  .stat-val.accent { color: #FF7A1A; }
-  .stat-val.good { color: #5FD068; }
+  .stat-label { font-size: 10px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
+  .stat-val { font-family: 'JetBrains Mono', monospace; font-size: 16px; font-weight: 700; color: var(--text-primary); }
+  .stat-val.accent { color: var(--accent); }
+  .stat-val.good { color: var(--good); }
 
   .method-toggle { display: flex; gap: 6px; margin-bottom: 12px; }
-  .method-toggle button { flex: 1; background: #14181C; color: #8A93A0; border: 1px solid #2A323A; padding: 9px; font-size: 12px; }
-  .method-toggle button.active { background: rgba(255,122,26,0.12); color: #FF7A1A; border-color: #FF7A1A; }
+  .method-toggle button { flex: 1; background: var(--input-bg); color: var(--text-secondary); border: 1px solid var(--input-border); padding: 9px; font-size: 12px; }
+  .method-toggle button.active { background: rgba(255,194,32,0.12); color: var(--accent); border-color: var(--accent); }
   .method-toggle-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 12px; }
-  .method-toggle-grid button { background: #14181C; color: #8A93A0; border: 1px solid #2A323A; padding: 9px 6px; font-size: 11.5px; }
-  .method-toggle-grid button.active { background: rgba(255,122,26,0.12); color: #FF7A1A; border-color: #FF7A1A; }
+  .method-toggle-grid button { background: var(--input-bg); color: var(--text-secondary); border: 1px solid var(--input-border); padding: 9px 6px; font-size: 11.5px; }
+  .method-toggle-grid button.active { background: rgba(255,194,32,0.12); color: var(--accent); border-color: var(--accent); }
 
   /* ---- Compass dial ---- */
   .compass-wrap { display: flex; justify-content: center; padding: 8px 0 4px; }
 
   /* ---- Plot ---- */
-  .plot-wrap { background: #14181C; border: 1px solid #2A323A; border-radius: 10px; overflow: hidden; }
+  .plot-wrap { background: var(--input-bg); border: 1px solid var(--input-border); border-radius: 10px; overflow: hidden; }
 
-  .empty-state { text-align: center; padding: 24px 10px; color: #5C6570; font-size: 13px; }
+  .empty-state { text-align: center; padding: 24px 10px; color: var(--text-dim); font-size: 13px; }
   .empty-state svg { opacity: 0.4; margin-bottom: 8px; }
 
   /* ---- Bottom nav ---- */
   nav {
     position: fixed; bottom: 0; left: 0; right: 0;
-    background: #1A1F24; border-top: 1px solid #262E35;
+    background: var(--header-bg); border-top: 1px solid var(--panel-border);
     display: flex; padding: 6px 4px calc(6px + env(safe-area-inset-bottom));
     z-index: 10;
   }
   nav button {
     flex: 1; background: none; display: flex; flex-direction: column; align-items: center; gap: 3px;
-    padding: 6px 2px; color: #5C6570; font-size: 10px; font-weight: 600; font-family: 'Space Grotesk', sans-serif;
+    padding: 6px 2px; color: var(--text-dim); font-size: 10px; font-weight: 600; font-family: 'Space Grotesk', sans-serif;
     letter-spacing: 0.02em;
   }
-  nav button.active { color: #FF7A1A; }
+  nav button.active { color: var(--accent); }
   nav button svg { width: 20px; height: 20px; }
 
-  .divider { height: 1px; background: #2A323A; margin: 10px 0; }
-  .small-note { font-size: 11px; color: #5C6570; line-height: 1.5; margin-top: 6px; }
+  .divider { height: 1px; background: var(--input-border); margin: 10px 0; }
+  .small-note { font-size: 11px; color: var(--text-dim); line-height: 1.5; margin-top: 6px; }
   .close-icon { flex-shrink: 0; }
 </style>
 </head>
 <body>
 <div id="app">
+  <div class="brand-strip"></div>
   <header>
     <h1 id="proj-name">TRAVERSE FIELD BOOK</h1>
     <div class="status-row">
-      <span id="badge-container"></span>
-      <span id="leg-count-label">0 legs</span>
+      <div class="status-left">
+        <span id="badge-container"></span>
+        <span id="leg-count-label">0 legs</span>
+        <span id="save-indicator">SAVED</span>
+      </div>
+      <button class="btn-reset" onclick="resetJob()" title="Clear all legs and start a new job">NEW JOB</button>
     </div>
   </header>
 
@@ -189,6 +247,64 @@ const state = {
   }
 };
 let legIdCounter = 1;
+
+/* =========================================================
+   PERSISTENCE (localStorage)
+   Job data auto-saves on every data-mutating action (not on
+   pure navigation like tab switches) and restores on load.
+========================================================= */
+const STORAGE_KEY = 'traverseFieldBook.v1';
+let saveFlashTimer = null;
+
+function saveState() {
+  try {
+    const payload = {
+      legs: state.legs,
+      method: state.method,
+      startN: state.startN,
+      startE: state.startE,
+      backsight: state.backsight,
+      legIdCounter
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+    flashSaved();
+  } catch (e) { /* storage unavailable (private browsing, quota) — fail silently */ }
+}
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return;
+    const data = JSON.parse(raw);
+    if (Array.isArray(data.legs)) state.legs = data.legs;
+    if (data.method === 'compass' || data.method === 'transit') state.method = data.method;
+    if (typeof data.startN === 'number') state.startN = data.startN;
+    if (typeof data.startE === 'number') state.startE = data.startE;
+    if (data.backsight) state.backsight = { ...state.backsight, ...data.backsight };
+    if (typeof data.legIdCounter === 'number') legIdCounter = data.legIdCounter;
+  } catch (e) { /* corrupt/unavailable storage — start fresh */ }
+}
+
+function resetJob() {
+  if (!confirm('Clear all legs and start a new job? This cannot be undone.')) return;
+  state.legs = [];
+  state.method = 'compass';
+  state.startN = 1000.000;
+  state.startE = 1000.000;
+  state.editingLegId = null;
+  state.backsight = { startEnabled: false, startKnown: '', startObserved: '', finishEnabled: false, finishKnown: '', finishObserved: '' };
+  legIdCounter = 1;
+  saveState();
+  render();
+}
+
+function flashSaved() {
+  const el = document.getElementById('save-indicator');
+  if (!el) return;
+  el.classList.add('show');
+  clearTimeout(saveFlashTimer);
+  saveFlashTimer = setTimeout(() => el.classList.remove('show'), 900);
+}
 
 /* =========================================================
    SURVEY MATH
@@ -344,14 +460,14 @@ function renderBacksightPanel() {
   return `
     <div class="panel">
       <div class="panel-title">Backsight Orientation Check (optional)</div>
-      <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:#DADEE3;margin-bottom:${bs.startEnabled?'10px':'0'};">
-        <input type="checkbox" id="bs-start-toggle" ${bs.startEnabled?'checked':''} style="width:auto;" onchange="toggleBacksight('start', this.checked)">
+      <label class="checkbox-row" style="margin-bottom:${bs.startEnabled?'10px':'0'};">
+        <input type="checkbox" id="bs-start-toggle" ${bs.startEnabled?'checked':''} onchange="toggleBacksight('start', this.checked)">
         Starting backsight
       </label>
       ${bs.startEnabled ? renderBacksightFields('start') : ''}
       <div class="divider"></div>
-      <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:#DADEE3;margin-bottom:${bs.finishEnabled?'10px':'0'};">
-        <input type="checkbox" id="bs-finish-toggle" ${bs.finishEnabled?'checked':''} style="width:auto;" onchange="toggleBacksight('finish', this.checked)">
+      <label class="checkbox-row" style="margin-bottom:${bs.finishEnabled?'10px':'0'};">
+        <input type="checkbox" id="bs-finish-toggle" ${bs.finishEnabled?'checked':''} onchange="toggleBacksight('finish', this.checked)">
         Finishing backsight
       </label>
       ${bs.finishEnabled ? renderBacksightFields('finish') : ''}
@@ -367,13 +483,13 @@ function renderBacksightFields(which) {
     <div class="row">
       <div>
         <label class="f">Known Bearing (DDD.MMSS)</label>
-        <input id="bs-${which}-known" class="bearing-input" style="font-size:15px;" type="text" inputmode="decimal" placeholder="e.g. 45.3000" value="${known||''}" oninput="onBacksightInput('${which}','known', this)">
-        <div id="bs-${which}-known-preview" class="bearing-preview pending" style="font-size:11px;">${bearingPreviewText(known)}</div>
+        <input id="bs-${which}-known" class="bearing-input bearing-input-sm" type="text" inputmode="decimal" placeholder="e.g. 45.3000" value="${known||''}" oninput="onBacksightInput('${which}','known', this)">
+        <div id="bs-${which}-known-preview" class="bearing-preview pending preview-sm">${bearingPreviewText(known)}</div>
       </div>
       <div>
         <label class="f">Observed Bearing (DDD.MMSS)</label>
-        <input id="bs-${which}-observed" class="bearing-input" style="font-size:15px;" type="text" inputmode="decimal" placeholder="e.g. 45.3020" value="${observed||''}" oninput="onBacksightInput('${which}','observed', this)">
-        <div id="bs-${which}-observed-preview" class="bearing-preview pending" style="font-size:11px;">${bearingPreviewText(observed)}</div>
+        <input id="bs-${which}-observed" class="bearing-input bearing-input-sm" type="text" inputmode="decimal" placeholder="e.g. 45.3020" value="${observed||''}" oninput="onBacksightInput('${which}','observed', this)">
+        <div id="bs-${which}-observed-preview" class="bearing-preview pending preview-sm">${bearingPreviewText(observed)}</div>
       </div>
     </div>
     <div id="bs-${which}-result">${renderBacksightResult(which)}</div>
@@ -417,6 +533,7 @@ function renderBacksightResult(which) {
 
 function toggleBacksight(which, checked) {
   state.backsight[which + 'Enabled'] = checked;
+  saveState();
   render();
 }
 
@@ -432,6 +549,7 @@ function onBacksightInput(which, field, el) {
   }
   const resultEl = document.getElementById(`bs-${which}-result`);
   if (resultEl) resultEl.innerHTML = renderBacksightResult(which);
+  saveState();
 }
 
 /* =========================================================
@@ -502,17 +620,17 @@ function renderTraverse() {
 function compassSvg() {
   return `
     <svg width="120" height="120" viewBox="0 0 120 120" id="compass-svg">
-      <circle cx="60" cy="60" r="54" fill="#0F1216" stroke="#2A323A" stroke-width="1.5"/>
-      <line x1="60" y1="10" x2="60" y2="18" stroke="#3A434D" stroke-width="1.5"/>
-      <line x1="60" y1="102" x2="60" y2="110" stroke="#3A434D" stroke-width="1.5"/>
-      <line x1="10" y1="60" x2="18" y2="60" stroke="#3A434D" stroke-width="1.5"/>
-      <line x1="102" y1="60" x2="110" y2="60" stroke="#3A434D" stroke-width="1.5"/>
-      <text x="60" y="16" text-anchor="middle" font-size="9" fill="#5C6570" font-family="JetBrains Mono">N</text>
-      <text x="60" y="112" text-anchor="middle" font-size="9" fill="#5C6570" font-family="JetBrains Mono">S</text>
-      <text x="8" y="63" text-anchor="middle" font-size="9" fill="#5C6570" font-family="JetBrains Mono">W</text>
-      <text x="112" y="63" text-anchor="middle" font-size="9" fill="#5C6570" font-family="JetBrains Mono">E</text>
-      <line id="compass-needle" x1="60" y1="60" x2="60" y2="14" stroke="#FF7A1A" stroke-width="2.5" stroke-linecap="round"/>
-      <circle cx="60" cy="60" r="3" fill="#FF7A1A"/>
+      <circle cx="60" cy="60" r="54" fill="var(--compass-bg)" stroke="var(--input-border)" stroke-width="1.5"/>
+      <line x1="60" y1="10" x2="60" y2="18" stroke="var(--compass-tick)" stroke-width="1.5"/>
+      <line x1="60" y1="102" x2="60" y2="110" stroke="var(--compass-tick)" stroke-width="1.5"/>
+      <line x1="10" y1="60" x2="18" y2="60" stroke="var(--compass-tick)" stroke-width="1.5"/>
+      <line x1="102" y1="60" x2="110" y2="60" stroke="var(--compass-tick)" stroke-width="1.5"/>
+      <text x="60" y="16" text-anchor="middle" font-size="9" fill="var(--text-dim)" font-family="JetBrains Mono">N</text>
+      <text x="60" y="112" text-anchor="middle" font-size="9" fill="var(--text-dim)" font-family="JetBrains Mono">S</text>
+      <text x="8" y="63" text-anchor="middle" font-size="9" fill="var(--text-dim)" font-family="JetBrains Mono">W</text>
+      <text x="112" y="63" text-anchor="middle" font-size="9" fill="var(--text-dim)" font-family="JetBrains Mono">E</text>
+      <line id="compass-needle" x1="60" y1="60" x2="60" y2="14" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round"/>
+      <circle cx="60" cy="60" r="3" fill="var(--accent)"/>
     </svg>
   `;
 }
@@ -572,7 +690,7 @@ function updateCompassNeedle() {
 
 function emptyState(msg) {
   return `<div class="empty-state">
-    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#5C6570" stroke-width="1.5"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l2.5 2.5"/></svg>
+    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--text-dim)" stroke-width="1.5"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l2.5 2.5"/></svg>
     <div>${msg}</div>
   </div>`;
 }
@@ -592,6 +710,7 @@ function saveLeg() {
   } else {
     state.legs.push({ id: legIdCounter++, deg: parsed.deg, min: parsed.min, sec: parsed.sec, dist });
   }
+  saveState();
   render();
   // Ready for the next leg immediately
   requestAnimationFrame(() => {
@@ -626,6 +745,7 @@ function cancelEdit() {
 function removeLeg(id) {
   if (state.editingLegId === id) state.editingLegId = null;
   state.legs = state.legs.filter(l => l.id !== id);
+  saveState();
   render();
 }
 
@@ -690,7 +810,7 @@ function renderClosure() {
     </div>
   `;
 }
-function setMethod(m) { state.method = m; render(); }
+function setMethod(m) { state.method = m; saveState(); render(); }
 
 /* =========================================================
    RENDER: COORDS / PLOT TAB
@@ -734,6 +854,7 @@ function renderCoords() {
 function updateStart(el) {
   if (el.id === 'in-startN') state.startN = Number(el.value)||0;
   if (el.id === 'in-startE') state.startE = Number(el.value)||0;
+  saveState();
   render();
 }
 
@@ -751,21 +872,21 @@ function plotSvg(pts) {
   for (let i=0;i<=8;i++) {
     const x = pad + i*(W-2*pad)/8;
     const y = pad + i*(H-2*pad)/8;
-    gridLines.push(`<line x1="${x}" y1="${pad}" x2="${x}" y2="${H-pad}" stroke="#1E252B" stroke-width="1"/>`);
-    gridLines.push(`<line x1="${pad}" y1="${y}" x2="${W-pad}" y2="${y}" stroke="#1E252B" stroke-width="1"/>`);
+    gridLines.push(`<line x1="${x}" y1="${pad}" x2="${x}" y2="${H-pad}" stroke="var(--row-border)" stroke-width="1"/>`);
+    gridLines.push(`<line x1="${pad}" y1="${y}" x2="${W-pad}" y2="${y}" stroke="var(--row-border)" stroke-width="1"/>`);
   }
 
   const pathD = pts.map((p,i)=> `${i===0?'M':'L'} ${cx(p.e).toFixed(1)} ${cy(p.n).toFixed(1)}`).join(' ') +
     ` L ${cx(pts[0].e).toFixed(1)} ${cy(pts[0].n).toFixed(1)}`;
 
   const dots = pts.map((p,i)=>`
-    <circle cx="${cx(p.e).toFixed(1)}" cy="${cy(p.n).toFixed(1)}" r="4" fill="${i===0?'#4FD1C5':'#FF7A1A'}" stroke="#14181C" stroke-width="1.5"/>
-    <text x="${cx(p.e).toFixed(1)}" y="${(cy(p.n)-9).toFixed(1)}" text-anchor="middle" font-size="9" fill="#8A93A0" font-family="JetBrains Mono">${p.label.replace(' (Start)','')}</text>
+    <circle cx="${cx(p.e).toFixed(1)}" cy="${cy(p.n).toFixed(1)}" r="4" fill="${i===0?'var(--accent-2)':'var(--accent)'}" stroke="var(--bg)" stroke-width="1.5"/>
+    <text x="${cx(p.e).toFixed(1)}" y="${(cy(p.n)-9).toFixed(1)}" text-anchor="middle" font-size="9" fill="var(--text-secondary)" font-family="JetBrains Mono">${p.label.replace(' (Start)','')}</text>
   `).join('');
 
   return `<svg width="100%" viewBox="0 0 ${W} ${H}" style="display:block;">
     ${gridLines.join('')}
-    <path d="${pathD}" fill="none" stroke="#4FD1C5" stroke-width="1.5" stroke-dasharray="4 3"/>
+    <path d="${pathD}" fill="none" stroke="var(--accent-2)" stroke-width="1.5" stroke-dasharray="4 3"/>
     ${dots}
   </svg>`;
 }
@@ -848,24 +969,24 @@ function onPlainBearingInput(el, previewId) {
 
 function renderRadiation() {
   return `
-    <div class="panel-title" style="font-size:11px;margin-top:2px;">Radiation 1</div>
+    <div class="panel-title panel-title-sm">Radiation 1</div>
     <div class="row">
       <div>
         <label class="f">Bearing (DDD.MMSS)</label>
-        <input id="rad1-bearing" class="bearing-input" style="font-size:15px;" type="text" inputmode="decimal" placeholder="e.g. 45.3000" oninput="onPlainBearingInput(this,'rad1-bearing-preview')">
-        <div id="rad1-bearing-preview" class="bearing-preview pending" style="font-size:11px;">Type degrees.minutesseconds</div>
+        <input id="rad1-bearing" class="bearing-input bearing-input-sm" type="text" inputmode="decimal" placeholder="e.g. 45.3000" oninput="onPlainBearingInput(this,'rad1-bearing-preview')">
+        <div id="rad1-bearing-preview" class="bearing-preview pending preview-sm">Type degrees.minutesseconds</div>
       </div>
       <div>
         <label class="f">Distance (m)</label>
         <input id="rad1-dist" type="number" inputmode="decimal" placeholder="0.000" step="0.001">
       </div>
     </div>
-    <div class="panel-title" style="font-size:11px;margin-top:10px;">Radiation 2</div>
+    <div class="panel-title panel-title-sm" style="margin-top:10px;">Radiation 2</div>
     <div class="row">
       <div>
         <label class="f">Bearing (DDD.MMSS)</label>
-        <input id="rad2-bearing" class="bearing-input" style="font-size:15px;" type="text" inputmode="decimal" placeholder="e.g. 130.1500" oninput="onPlainBearingInput(this,'rad2-bearing-preview')">
-        <div id="rad2-bearing-preview" class="bearing-preview pending" style="font-size:11px;">Type degrees.minutesseconds</div>
+        <input id="rad2-bearing" class="bearing-input bearing-input-sm" type="text" inputmode="decimal" placeholder="e.g. 130.1500" oninput="onPlainBearingInput(this,'rad2-bearing-preview')">
+        <div id="rad2-bearing-preview" class="bearing-preview pending preview-sm">Type degrees.minutesseconds</div>
       </div>
       <div>
         <label class="f">Distance (m)</label>
@@ -902,13 +1023,13 @@ function renderCompare() {
     <div class="row">
       <div>
         <label class="f">Bearing A (DDD.MMSS)</label>
-        <input id="cmp-a" class="bearing-input" style="font-size:15px;" type="text" inputmode="decimal" placeholder="e.g. 45.3000" oninput="onPlainBearingInput(this,'cmp-a-preview')">
-        <div id="cmp-a-preview" class="bearing-preview pending" style="font-size:11px;">Type degrees.minutesseconds</div>
+        <input id="cmp-a" class="bearing-input bearing-input-sm" type="text" inputmode="decimal" placeholder="e.g. 45.3000" oninput="onPlainBearingInput(this,'cmp-a-preview')">
+        <div id="cmp-a-preview" class="bearing-preview pending preview-sm">Type degrees.minutesseconds</div>
       </div>
       <div>
         <label class="f">Bearing B (DDD.MMSS)</label>
-        <input id="cmp-b" class="bearing-input" style="font-size:15px;" type="text" inputmode="decimal" placeholder="e.g. 90.0000" oninput="onPlainBearingInput(this,'cmp-b-preview')">
-        <div id="cmp-b-preview" class="bearing-preview pending" style="font-size:11px;">Type degrees.minutesseconds</div>
+        <input id="cmp-b" class="bearing-input bearing-input-sm" type="text" inputmode="decimal" placeholder="e.g. 90.0000" oninput="onPlainBearingInput(this,'cmp-b-preview')">
+        <div id="cmp-b-preview" class="bearing-preview pending preview-sm">Type degrees.minutesseconds</div>
       </div>
     </div>
     <button class="btn-primary" onclick="computeCompare()">CALCULATE</button>
@@ -961,7 +1082,7 @@ function render() {
 function flash(msg) {
   const el = document.createElement('div');
   el.textContent = msg;
-  el.style.cssText = 'position:fixed;top:14px;left:50%;transform:translateX(-50%);background:#FF6B6B;color:#14181C;padding:8px 16px;border-radius:8px;font-size:12px;font-weight:700;z-index:99;font-family:Space Grotesk,sans-serif;';
+  el.style.cssText = 'position:fixed;top:14px;left:50%;transform:translateX(-50%);background:var(--bad);color:var(--navy-deep);padding:8px 16px;border-radius:8px;font-size:12px;font-weight:700;z-index:99;font-family:Space Grotesk,sans-serif;';
   document.body.appendChild(el);
   setTimeout(()=>el.remove(), 1800);
 }
@@ -974,6 +1095,7 @@ document.getElementById('bottom-nav').addEventListener('click', (e) => {
   document.getElementById('main').scrollTop = 0;
 });
 
+loadState();
 render();
 </script>
 </body>

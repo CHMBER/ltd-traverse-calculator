@@ -25,10 +25,16 @@ it first, since the deployment model (copy one file to a phone) depends on it.
   `dist * sin(az)` = ΔEasting ("dep"). This naming (`lat`/`dep`) is used internally in
   the math functions but UI labels always say "ΔNorthing"/"ΔEasting" — surveyor-facing
   language should stay in Northing/Easting, not the old lat/dep jargon.
-- Design system: dark graphite background, safety-orange (`#FF7A1A`) as the primary
-  accent (flagging-tape reference), teal (`#4FD1C5`) as secondary/data accent (steel-tape
-  reference), monospace (`JetBrains Mono`) for all numeric/coordinate data, Space Grotesk
-  for headers/buttons. Bottom tab nav, mobile-first, big tap targets.
+- Design system: dark navy-black background, Parker Scanlon brand palette — navy
+  (`#1B3B6F`) and gold/yellow (`#FFC220`) as the primary accents, metallic silver
+  (`#C9D0D8`) as the secondary/data accent. All colors are CSS custom properties on
+  `:root` (`--accent`, `--accent-2`, `--navy`, etc.) — inline SVGs (compass, plot)
+  reference the same `var(--x)` values rather than duplicating hex codes, so the
+  palette only needs to change in one place. A 3px navy→yellow→silver gradient strip
+  (`.brand-strip`) at the very top of the app is the one deliberately "branded" touch;
+  everything else stays flat and functional. Monospace (`JetBrains Mono`) for all
+  numeric/coordinate data, Space Grotesk for headers/buttons. Bottom tab nav,
+  mobile-first, big tap targets.
 
 ## Current features (all working, tested)
 
@@ -73,11 +79,17 @@ it first, since the deployment model (copy one file to a phone) depends on it.
 
 ## Known limitations / likely next steps
 
-- **No persistence.** State lives only in JS memory; refreshing the page loses everything.
-  This was intentionally deferred (Claude.ai's artifact sandbox blocks localStorage) but
-  is the top priority for a real field tool — surveyors cannot lose data mid-job. Needs
-  IndexedDB or localStorage, plus probably an export/import (JSON or CSV) so a job can be
-  backed up or moved between devices.
+- **Persistence (localStorage) is now implemented.** State auto-saves to `localStorage`
+  (key `traverseFieldBook.v1`) on every data-mutating action — add/edit/delete leg,
+  method toggle, start coordinate change, backsight fields — via `saveState()`, and
+  restores on page load via `loadState()` (both near the top of the script, right after
+  the `state` object). Tab switches and other pure-navigation renders do NOT trigger a
+  save, so `saveState()` is called explicitly from each mutating function rather than
+  hooked into `render()` globally — keep that pattern if you add new state-mutating
+  actions. The header's "NEW JOB" button (`resetJob()`) wipes it with a `confirm()`
+  prompt. Still missing: JSON/CSV export-import so a job can be backed up or moved
+  between devices, and IndexedDB if job size ever outgrows localStorage's ~5MB limit
+  (unlikely for a single traverse, but worth knowing).
 - **No true PWA manifest/service worker yet** — currently works via "Add to Home Screen"
   in Chrome but isn't a real installable/offline-cached PWA. Needs `manifest.json` +
   a service worker for real offline reliability.
