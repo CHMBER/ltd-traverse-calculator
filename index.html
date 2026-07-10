@@ -1,0 +1,980 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
+<title>Traverse Field Book</title>
+<style>
+  @font-face { font-family: 'Space Grotesk'; src: local('Space Grotesk'); }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: #14181C;
+    color: #EDEFF2;
+    font-family: -apple-system, 'Inter', system-ui, sans-serif;
+    overscroll-behavior: none;
+    user-select: none;
+  }
+  input, select { user-select: text; }
+  #app { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
+
+  /* ---- Header ---- */
+  header {
+    padding: 14px 16px 10px;
+    background: #1A1F24;
+    border-bottom: 1px solid #262E35;
+    flex-shrink: 0;
+  }
+  header h1 {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 17px; font-weight: 700; letter-spacing: 0.02em;
+    margin: 0 0 2px 0; color: #EDEFF2;
+  }
+  .status-row { display: flex; align-items: center; gap: 8px; font-size: 11px; color: #8A93A0; }
+  .badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 3px 8px; border-radius: 20px; font-size: 10.5px; font-weight: 600;
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 0.02em;
+  }
+  .badge.ok { background: rgba(95,208,104,0.12); color: #5FD068; border: 1px solid rgba(95,208,104,0.3); }
+  .badge.bad { background: rgba(255,85,85,0.12); color: #FF6B6B; border: 1px solid rgba(255,85,85,0.3); }
+  .badge.neu { background: rgba(138,147,160,0.12); color: #8A93A0; border: 1px solid rgba(138,147,160,0.25); }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+  /* ---- Main scroll area ---- */
+  main { flex: 1; overflow-y: auto; padding: 14px 14px 90px; }
+  .panel {
+    background: #1E252B; border: 1px solid #262E35; border-radius: 14px;
+    padding: 14px; margin-bottom: 12px;
+  }
+  .panel-title {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
+    color: #FF7A1A; margin: 0 0 10px 0;
+  }
+  .row { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; }
+  .row > * { flex: 1; }
+  label.f { font-size: 10.5px; color: #8A93A0; display: block; margin-bottom: 4px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+  input, select {
+    width: 100%; background: #14181C; border: 1px solid #2A323A; color: #EDEFF2;
+    padding: 10px 8px; border-radius: 8px; font-size: 15px; font-family: 'JetBrains Mono', monospace;
+    outline: none;
+  }
+  input:focus, select:focus { border-color: #FF7A1A; }
+  select { font-family: inherit; -webkit-appearance: none; appearance: none;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6'><path d='M0 0l5 6 5-6z' fill='%238A93A0'/></svg>");
+    background-repeat: no-repeat; background-position: right 10px center; padding-right: 26px;
+  }
+  .bearing-input { font-size: 20px; text-align: center; letter-spacing: 0.03em; padding: 12px 8px; }
+  .bearing-preview {
+    text-align: center; font-family: 'JetBrains Mono', monospace; font-size: 15px;
+    color: #4FD1C5; font-weight: 700; min-height: 20px; margin-top: 6px; letter-spacing: 0.02em;
+  }
+  .bearing-preview.pending { color: #5C6570; font-weight: 500; font-size: 12px; }
+
+  button {
+    font-family: 'Space Grotesk', sans-serif; font-weight: 700; letter-spacing: 0.02em;
+    border: none; border-radius: 10px; padding: 12px; font-size: 14px; cursor: pointer;
+  }
+  .btn-primary { background: #FF7A1A; color: #14181C; width: 100%; }
+  .btn-primary:active { background: #E56A0E; }
+  .btn-secondary { background: #262E35; color: #EDEFF2; border: 1px solid #333D46; }
+  .btn-ghost { background: transparent; color: #8A93A0; border: 1px solid #2A323A; }
+  tr.editing-row td { background: rgba(255,122,26,0.08); color: #FF7A1A; }
+  .row-actions { display: flex; gap: 2px; justify-content: flex-end; }
+  .btn-icon-ghost { background: transparent; border: none; padding: 4px 7px; font-size: 13px; color: #4FD1C5; }
+  .btn-icon-ghost.danger { color: #FF6B6B; }
+
+  table { width: 100%; border-collapse: collapse; font-family: 'JetBrains Mono', monospace; font-size: 12.5px; }
+  th { text-align: right; color: #8A93A0; font-weight: 600; font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; padding: 4px 6px; border-bottom: 1px solid #2A323A; }
+  th:first-child, td:first-child { text-align: left; }
+  td { text-align: right; padding: 7px 6px; border-bottom: 1px solid #1E252B; color: #DADEE3; }
+  tr:last-child td { border-bottom: none; }
+  tfoot td { border-top: 1px solid #2A323A; border-bottom: none; color: #EDEFF2; }
+  .leg-name { color: #4FD1C5; font-weight: 700; }
+
+  .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .stat {
+    background: #14181C; border: 1px solid #2A323A; border-radius: 10px; padding: 10px;
+  }
+  .stat-label { font-size: 10px; color: #8A93A0; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
+  .stat-val { font-family: 'JetBrains Mono', monospace; font-size: 16px; font-weight: 700; color: #EDEFF2; }
+  .stat-val.accent { color: #FF7A1A; }
+  .stat-val.good { color: #5FD068; }
+
+  .method-toggle { display: flex; gap: 6px; margin-bottom: 12px; }
+  .method-toggle button { flex: 1; background: #14181C; color: #8A93A0; border: 1px solid #2A323A; padding: 9px; font-size: 12px; }
+  .method-toggle button.active { background: rgba(255,122,26,0.12); color: #FF7A1A; border-color: #FF7A1A; }
+  .method-toggle-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 12px; }
+  .method-toggle-grid button { background: #14181C; color: #8A93A0; border: 1px solid #2A323A; padding: 9px 6px; font-size: 11.5px; }
+  .method-toggle-grid button.active { background: rgba(255,122,26,0.12); color: #FF7A1A; border-color: #FF7A1A; }
+
+  /* ---- Compass dial ---- */
+  .compass-wrap { display: flex; justify-content: center; padding: 8px 0 4px; }
+
+  /* ---- Plot ---- */
+  .plot-wrap { background: #14181C; border: 1px solid #2A323A; border-radius: 10px; overflow: hidden; }
+
+  .empty-state { text-align: center; padding: 24px 10px; color: #5C6570; font-size: 13px; }
+  .empty-state svg { opacity: 0.4; margin-bottom: 8px; }
+
+  /* ---- Bottom nav ---- */
+  nav {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    background: #1A1F24; border-top: 1px solid #262E35;
+    display: flex; padding: 6px 4px calc(6px + env(safe-area-inset-bottom));
+    z-index: 10;
+  }
+  nav button {
+    flex: 1; background: none; display: flex; flex-direction: column; align-items: center; gap: 3px;
+    padding: 6px 2px; color: #5C6570; font-size: 10px; font-weight: 600; font-family: 'Space Grotesk', sans-serif;
+    letter-spacing: 0.02em;
+  }
+  nav button.active { color: #FF7A1A; }
+  nav button svg { width: 20px; height: 20px; }
+
+  .divider { height: 1px; background: #2A323A; margin: 10px 0; }
+  .small-note { font-size: 11px; color: #5C6570; line-height: 1.5; margin-top: 6px; }
+  .close-icon { flex-shrink: 0; }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1 id="proj-name">TRAVERSE FIELD BOOK</h1>
+    <div class="status-row">
+      <span id="badge-container"></span>
+      <span id="leg-count-label">0 legs</span>
+    </div>
+  </header>
+
+  <main id="main"></main>
+
+  <nav id="bottom-nav">
+    <button data-tab="traverse">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 17l6-10 5 6 7-10"/></svg>
+      TRAVERSE
+    </button>
+    <button data-tab="closure">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+      CLOSURE
+    </button>
+    <button data-tab="coords">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4v16h16"/><circle cx="9" cy="14" r="1.5" fill="currentColor"/><circle cx="14" cy="8" r="1.5" fill="currentColor"/><circle cx="18" cy="12" r="1.5" fill="currentColor"/></svg>
+      PLOT
+    </button>
+    <button data-tab="missing">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 3v18M15 3v18M3 9h18M3 15h18" stroke-dasharray="2 2"/></svg>
+      MISSING
+    </button>
+  </nav>
+</div>
+
+<script>
+/* =========================================================
+   STATE
+========================================================= */
+const state = {
+  tab: 'traverse',
+  legs: [],          // {id, deg, min, sec, dist} — deg/min/sec is a whole-circle azimuth (0-360)
+  method: 'compass',  // 'compass' | 'transit'
+  startN: 1000.000,
+  startE: 1000.000,
+  missingMode: 'inverse',
+  editingLegId: null,
+  backsight: {
+    startEnabled: false, startKnown: '', startObserved: '',
+    finishEnabled: false, finishKnown: '', finishObserved: ''
+  }
+};
+let legIdCounter = 1;
+
+/* =========================================================
+   SURVEY MATH
+========================================================= */
+function dmsToDecimal(deg, min, sec) {
+  return (Number(deg)||0) + (Number(min)||0)/60 + (Number(sec)||0)/3600;
+}
+
+// Parse DDD.MMSS field-entry format -> { deg, min, sec }
+// Degrees = integer part. Fractional digits are read left-to-right as MM then SS,
+// right-padded with zeros if the surveyor didn't type all 4 digits (e.g. "45.3" -> 45°30'00").
+function parseDDDMMSS(raw) {
+  if (raw === null || raw === undefined || raw === '') return null;
+  const parts = String(raw).split('.');
+  const deg = parseInt(parts[0], 10) || 0;
+  let frac = (parts[1] || '').padEnd(4, '0').slice(0, 4);
+  let min = parseInt(frac.slice(0, 2), 10) || 0;
+  let sec = parseInt(frac.slice(2, 4), 10) || 0;
+  if (min > 59) min = 59;
+  if (sec > 59) sec = 59;
+  return { deg, min, sec };
+}
+
+// A bearing entry is "complete" once 4 fractional digits (MMSS) have been typed
+function isBearingComplete(raw) {
+  const parts = String(raw || '').split('.');
+  return parts.length === 2 && parts[1].length >= 4;
+}
+
+function azimuthToBearing(az) {
+  az = ((az % 360) + 360) % 360;
+  const deg = Math.floor(az);
+  const minFull = (az - deg) * 60;
+  const min = Math.floor(minFull);
+  const sec = Math.round((minFull - min) * 60);
+  return { deg, min, sec };
+}
+
+function legAzimuth(leg) {
+  return dmsToDecimal(leg.deg, leg.min, leg.sec);
+}
+
+function computeLegVectors() {
+  return state.legs.map(leg => {
+    const az = legAzimuth(leg);
+    const rad = az * Math.PI / 180;
+    const dist = Number(leg.dist) || 0;
+    const lat = dist * Math.cos(rad);   // ΔNorthing
+    const dep = dist * Math.sin(rad);   // ΔEasting
+    return { ...leg, az, dist, lat, dep };
+  });
+}
+
+function computeClosure() {
+  const vecs = computeLegVectors();
+  const perimeter = vecs.reduce((s,v)=>s+v.dist,0);
+  const sumLat = vecs.reduce((s,v)=>s+v.lat,0);
+  const sumDep = vecs.reduce((s,v)=>s+v.dep,0);
+  const linearError = Math.sqrt(sumLat*sumLat + sumDep*sumDep);
+  const precisionDenom = linearError > 0 ? perimeter/linearError : Infinity;
+  // Direction of the closing-error vector (start point -> computed end point).
+  // Comparing this bearing against the legs points toward which one is the likely blunder.
+  const miscloseAz = linearError > 0 ? (Math.atan2(sumDep, sumLat) * 180/Math.PI + 360) % 360 : 0;
+  const miscloseBearing = azimuthToBearing(miscloseAz);
+  return { vecs, perimeter, sumLat, sumDep, linearError, precisionDenom, miscloseAz, miscloseBearing };
+}
+
+function computeAdjusted() {
+  const { vecs, perimeter, sumLat, sumDep } = computeClosure();
+  const sumAbsLat = vecs.reduce((s,v)=>s+Math.abs(v.lat),0);
+  const sumAbsDep = vecs.reduce((s,v)=>s+Math.abs(v.dep),0);
+
+  return vecs.map(v => {
+    let corrLat, corrDep;
+    if (state.method === 'compass') {
+      corrLat = perimeter > 0 ? -sumLat * (v.dist/perimeter) : 0;
+      corrDep = perimeter > 0 ? -sumDep * (v.dist/perimeter) : 0;
+    } else {
+      corrLat = sumAbsLat > 0 ? -sumLat * (Math.abs(v.lat)/sumAbsLat) : 0;
+      corrDep = sumAbsDep > 0 ? -sumDep * (Math.abs(v.dep)/sumAbsDep) : 0;
+    }
+    const adjLat = v.lat+corrLat, adjDep = v.dep+corrDep;
+    const computedDist = Math.sqrt(adjLat*adjLat + adjDep*adjDep);
+    const computedAz = (Math.atan2(adjDep, adjLat) * 180/Math.PI + 360) % 360;
+    const computedBearing = azimuthToBearing(computedAz);
+    return { ...v, corrLat, corrDep, adjLat, adjDep, computedDist, computedAz, computedBearing };
+  });
+}
+
+function computeCoordinates() {
+  const adj = computeAdjusted();
+  let n = Number(state.startN)||0, e = Number(state.startE)||0;
+  const pts = [{ label: 'P0 (Start)', n, e }];
+  adj.forEach((v,i) => {
+    n += v.adjLat; e += v.adjDep;
+    pts.push({ label: `P${i+1}`, n, e });
+  });
+  return pts;
+}
+
+function inverse(n1,e1,n2,e2) {
+  const dLat = n2-n1, dDep = e2-e1;
+  const dist = Math.sqrt(dLat*dLat + dDep*dDep);
+  const az = (Math.atan2(dDep, dLat) * 180/Math.PI + 360) % 360;
+  return { dist, az, bearing: azimuthToBearing(az) };
+}
+
+// The unmeasured side needed to close the loop, given all legs entered so far.
+function computeClosingLeg() {
+  if (state.legs.length < 2) return null;
+  const vecs = computeLegVectors();
+  const sumLat = vecs.reduce((s,v)=>s+v.lat,0);
+  const sumDep = vecs.reduce((s,v)=>s+v.dep,0);
+  const missingLat = -sumLat, missingDep = -sumDep;
+  const dist = Math.sqrt(missingLat*missingLat + missingDep*missingDep);
+  const az = (Math.atan2(missingDep, missingLat) * 180/Math.PI + 360) % 360;
+  return { dist, bearing: azimuthToBearing(az) };
+}
+
+/* =========================================================
+   FORMATTERS
+========================================================= */
+const fmt = (n, d=3) => (Number.isFinite(n) ? n.toFixed(d) : '—');
+const fmtBearing = b => `${String(b.deg).padStart(3,'0')}°${String(b.min).padStart(2,'0')}'${String(b.sec).padStart(2,'0')}"`;
+const fmtLegBearing = leg => `${String(leg.deg||0).padStart(3,'0')}°${String(leg.min||0).padStart(2,'0')}'${String(leg.sec||0).padStart(2,'0')}"`;
+
+/* =========================================================
+   RENDER: HEADER
+========================================================= */
+function renderHeader() {
+  const badgeEl = document.getElementById('badge-container');
+  const countEl = document.getElementById('leg-count-label');
+  countEl.textContent = `${state.legs.length} leg${state.legs.length!==1?'s':''}`;
+  if (state.legs.length < 3) {
+    badgeEl.innerHTML = `<span class="badge neu"><span class="dot"></span>NEED 3+ LEGS</span>`;
+    return;
+  }
+  const { precisionDenom } = computeClosure();
+  if (precisionDenom >= 5000) {
+    badgeEl.innerHTML = `<span class="badge ok"><span class="dot"></span>CLOSED 1:${Math.round(precisionDenom).toLocaleString()}</span>`;
+  } else if (precisionDenom >= 1000) {
+    badgeEl.innerHTML = `<span class="badge neu"><span class="dot"></span>1:${Math.round(precisionDenom).toLocaleString()}</span>`;
+  } else {
+    badgeEl.innerHTML = `<span class="badge bad"><span class="dot"></span>POOR 1:${Math.round(precisionDenom).toLocaleString()}</span>`;
+  }
+}
+
+/* =========================================================
+   RENDER: BACKSIGHT ORIENTATION CHECK (optional, in Traverse tab)
+========================================================= */
+function renderBacksightPanel() {
+  const bs = state.backsight;
+  return `
+    <div class="panel">
+      <div class="panel-title">Backsight Orientation Check (optional)</div>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:#DADEE3;margin-bottom:${bs.startEnabled?'10px':'0'};">
+        <input type="checkbox" id="bs-start-toggle" ${bs.startEnabled?'checked':''} style="width:auto;" onchange="toggleBacksight('start', this.checked)">
+        Starting backsight
+      </label>
+      ${bs.startEnabled ? renderBacksightFields('start') : ''}
+      <div class="divider"></div>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:#DADEE3;margin-bottom:${bs.finishEnabled?'10px':'0'};">
+        <input type="checkbox" id="bs-finish-toggle" ${bs.finishEnabled?'checked':''} style="width:auto;" onchange="toggleBacksight('finish', this.checked)">
+        Finishing backsight
+      </label>
+      ${bs.finishEnabled ? renderBacksightFields('finish') : ''}
+      <div class="small-note">Enter the known control bearing to a backsight point, and what was actually observed to that same point. The difference is a genuine, independent orientation check — unlike the traverse bearings themselves, this can catch a real angular error.</div>
+    </div>
+  `;
+}
+
+function renderBacksightFields(which) {
+  const bs = state.backsight;
+  const known = bs[which+'Known'], observed = bs[which+'Observed'];
+  return `
+    <div class="row">
+      <div>
+        <label class="f">Known Bearing (DDD.MMSS)</label>
+        <input id="bs-${which}-known" class="bearing-input" style="font-size:15px;" type="text" inputmode="decimal" placeholder="e.g. 45.3000" value="${known||''}" oninput="onBacksightInput('${which}','known', this)">
+        <div id="bs-${which}-known-preview" class="bearing-preview pending" style="font-size:11px;">${bearingPreviewText(known)}</div>
+      </div>
+      <div>
+        <label class="f">Observed Bearing (DDD.MMSS)</label>
+        <input id="bs-${which}-observed" class="bearing-input" style="font-size:15px;" type="text" inputmode="decimal" placeholder="e.g. 45.3020" value="${observed||''}" oninput="onBacksightInput('${which}','observed', this)">
+        <div id="bs-${which}-observed-preview" class="bearing-preview pending" style="font-size:11px;">${bearingPreviewText(observed)}</div>
+      </div>
+    </div>
+    <div id="bs-${which}-result">${renderBacksightResult(which)}</div>
+  `;
+}
+
+function bearingPreviewText(raw) {
+  const parsed = parseDDDMMSS(raw);
+  if (!raw || !parsed) return 'Type degrees.minutesseconds';
+  return `${String(parsed.deg).padStart(3,'0')}°${String(parsed.min).padStart(2,'0')}'${String(parsed.sec).padStart(2,'0')}"`;
+}
+
+function fmtSignedBearing(decDeg) {
+  const sign = decDeg < 0 ? '-' : '+';
+  const abs = Math.abs(decDeg);
+  const deg = Math.floor(abs);
+  const minFull = (abs-deg)*60;
+  const min = Math.floor(minFull);
+  const sec = Math.round((minFull-min)*60);
+  return `${sign}${deg}°${String(min).padStart(2,'0')}'${String(sec).padStart(2,'0')}"`;
+}
+
+function renderBacksightResult(which) {
+  const bs = state.backsight;
+  const known = parseDDDMMSS(bs[which+'Known']);
+  const observed = parseDDDMMSS(bs[which+'Observed']);
+  if (!known || !observed || !isBearingComplete(bs[which+'Known']) || !isBearingComplete(bs[which+'Observed'])) return '';
+  const knownDec = dmsToDecimal(known.deg, known.min, known.sec);
+  const obsDec = dmsToDecimal(observed.deg, observed.min, observed.sec);
+  let diff = obsDec - knownDec;
+  diff = ((diff + 180) % 360 + 360) % 360 - 180; // signed, -180..180
+  const label = which === 'start' ? 'Starting Orientation Check' : 'Finishing Orientation Check';
+  const good = Math.abs(diff) < (1/60); // within 1 arc-minute
+  return `
+    <div class="stat" style="margin-top:2px;">
+      <div class="stat-label">${label}</div>
+      <div class="stat-val ${good?'good':'accent'}">${fmtSignedBearing(diff)}</div>
+    </div>
+  `;
+}
+
+function toggleBacksight(which, checked) {
+  state.backsight[which + 'Enabled'] = checked;
+  render();
+}
+
+function onBacksightInput(which, field, el) {
+  const cleaned = sanitizeBearingInput(el.value);
+  if (cleaned !== el.value) el.value = cleaned;
+  state.backsight[which + (field === 'known' ? 'Known' : 'Observed')] = cleaned;
+
+  const previewEl = document.getElementById(`bs-${which}-${field}-preview`);
+  if (previewEl) {
+    previewEl.textContent = bearingPreviewText(cleaned);
+    previewEl.classList.toggle('pending', !isBearingComplete(cleaned));
+  }
+  const resultEl = document.getElementById(`bs-${which}-result`);
+  if (resultEl) resultEl.innerHTML = renderBacksightResult(which);
+}
+
+/* =========================================================
+   RENDER: TRAVERSE TAB
+========================================================= */
+function renderTraverse() {
+  const legs = state.legs;
+  const editing = state.editingLegId;
+  let rows = legs.map((leg, i) => `
+    <tr class="${leg.id === editing ? 'editing-row' : ''}">
+      <td class="leg-name">L${i+1}</td>
+      <td>${fmtLegBearing(leg)}</td>
+      <td>${fmt(Number(leg.dist)||0,2)}</td>
+      <td>
+        <div class="row-actions">
+          <button class="btn-icon-ghost" onclick="editLeg(${leg.id})" title="Edit">✎</button>
+          <button class="btn-icon-ghost danger" onclick="removeLeg(${leg.id})" title="Delete">✕</button>
+        </div>
+      </td>
+    </tr>`).join('');
+
+  const isEditing = editing !== null;
+
+  return `
+    ${renderBacksightPanel()}
+
+    <div class="panel">
+      <div class="panel-title">${isEditing ? `Edit Leg` : 'Add Traverse Leg'}</div>
+      <label class="f">Bearing / Azimuth — DDD.MMSS</label>
+      <input id="in-bearing" class="bearing-input" type="text" inputmode="decimal" placeholder="e.g. 125.3045" autocomplete="off">
+      <div id="bearing-preview" class="bearing-preview pending">Type degrees.minutesseconds</div>
+      <div class="compass-wrap">${compassSvg()}</div>
+      <label class="f">Distance (m)</label>
+      <input id="in-dist" type="number" inputmode="decimal" placeholder="0.000" step="0.001" style="margin-bottom:10px;">
+      ${isEditing ? `
+        <div class="row" style="gap:8px;">
+          <button class="btn-primary" style="flex:2;" onclick="saveLeg()">✓ UPDATE LEG</button>
+          <button class="btn-ghost" style="flex:1;" onclick="cancelEdit()">CANCEL</button>
+        </div>
+      ` : `<button class="btn-primary" onclick="saveLeg()">+ ADD LEG</button>`}
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">Traverse Legs</div>
+      ${legs.length === 0 ? emptyState('No legs recorded yet. Enter a bearing and distance above to begin.') : `
+      <table>
+        <thead><tr><th>Leg</th><th>Bearing</th><th>Dist (m)</th><th></th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>`}
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">Closing Leg (Live)</div>
+      ${(() => {
+        const closing = computeClosingLeg();
+        if (!closing) return emptyState('Add at least 2 legs to calculate the closing leg.');
+        return `
+        <div class="stat-grid">
+          <div class="stat"><div class="stat-label">Bearing</div><div class="stat-val accent">${fmtBearing(closing.bearing)}</div></div>
+          <div class="stat"><div class="stat-label">Distance</div><div class="stat-val accent">${fmt(closing.dist,3)} m</div></div>
+        </div>`;
+      })()}
+      <div class="small-note">The bearing and distance needed to return to the start point, recalculated from all legs entered so far.</div>
+    </div>
+  `;
+}
+
+function compassSvg() {
+  return `
+    <svg width="120" height="120" viewBox="0 0 120 120" id="compass-svg">
+      <circle cx="60" cy="60" r="54" fill="#0F1216" stroke="#2A323A" stroke-width="1.5"/>
+      <line x1="60" y1="10" x2="60" y2="18" stroke="#3A434D" stroke-width="1.5"/>
+      <line x1="60" y1="102" x2="60" y2="110" stroke="#3A434D" stroke-width="1.5"/>
+      <line x1="10" y1="60" x2="18" y2="60" stroke="#3A434D" stroke-width="1.5"/>
+      <line x1="102" y1="60" x2="110" y2="60" stroke="#3A434D" stroke-width="1.5"/>
+      <text x="60" y="16" text-anchor="middle" font-size="9" fill="#5C6570" font-family="JetBrains Mono">N</text>
+      <text x="60" y="112" text-anchor="middle" font-size="9" fill="#5C6570" font-family="JetBrains Mono">S</text>
+      <text x="8" y="63" text-anchor="middle" font-size="9" fill="#5C6570" font-family="JetBrains Mono">W</text>
+      <text x="112" y="63" text-anchor="middle" font-size="9" fill="#5C6570" font-family="JetBrains Mono">E</text>
+      <line id="compass-needle" x1="60" y1="60" x2="60" y2="14" stroke="#FF7A1A" stroke-width="2.5" stroke-linecap="round"/>
+      <circle cx="60" cy="60" r="3" fill="#FF7A1A"/>
+    </svg>
+  `;
+}
+
+function sanitizeBearingInput(raw) {
+  // digits + at most one decimal point, max 4 digits after the point
+  let s = raw.replace(/[^0-9.]/g, '');
+  const firstDot = s.indexOf('.');
+  if (firstDot !== -1) {
+    s = s.slice(0, firstDot+1) + s.slice(firstDot+1).replace(/\./g, '');
+  }
+  const [intPart, fracPart] = s.split('.');
+  if (fracPart !== undefined) {
+    s = intPart + '.' + fracPart.slice(0,4);
+  }
+  return s;
+}
+
+function onBearingInput(e) {
+  const el = e.target;
+  const cleaned = sanitizeBearingInput(el.value);
+  if (cleaned !== el.value) el.value = cleaned;
+  updateCompassNeedle();
+  if (isBearingComplete(el.value)) {
+    const distEl = document.getElementById('in-dist');
+    if (distEl) { distEl.focus(); distEl.select(); }
+  }
+}
+
+function updateCompassNeedle() {
+  const svg = document.getElementById('compass-svg');
+  const bearingEl = document.getElementById('in-bearing');
+  const preview = document.getElementById('bearing-preview');
+  if (!svg || !bearingEl) return;
+  const raw = bearingEl.value;
+  const parsed = parseDDDMMSS(raw);
+  const az = parsed ? dmsToDecimal(parsed.deg, parsed.min, parsed.sec) : 0;
+
+  if (preview) {
+    if (parsed && raw !== '') {
+      preview.textContent = `${String(parsed.deg).padStart(3,'0')}°${String(parsed.min).padStart(2,'0')}'${String(parsed.sec).padStart(2,'0')}"`;
+      preview.classList.toggle('pending', !isBearingComplete(raw));
+    } else {
+      preview.textContent = 'Type degrees.minutesseconds';
+      preview.classList.add('pending');
+    }
+  }
+
+  const rad = (az - 90) * Math.PI/180; // svg 0deg = pointing right, we want 0=up(N)
+  const r = 46;
+  const x2 = 60 + r*Math.cos(rad);
+  const y2 = 60 + r*Math.sin(rad);
+  const needle = document.getElementById('compass-needle');
+  needle.setAttribute('x2', x2);
+  needle.setAttribute('y2', y2);
+}
+
+function emptyState(msg) {
+  return `<div class="empty-state">
+    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#5C6570" stroke-width="1.5"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l2.5 2.5"/></svg>
+    <div>${msg}</div>
+  </div>`;
+}
+
+function saveLeg() {
+  const bearingEl = document.getElementById('in-bearing');
+  const raw = bearingEl.value;
+  const parsed = parseDDDMMSS(raw);
+  if (!raw || !parsed) { flash('Enter a bearing in DDD.MMSS format'); return; }
+  const dist = document.getElementById('in-dist').value;
+  if (!dist || Number(dist) <= 0) { flash('Enter a distance greater than 0'); return; }
+
+  if (state.editingLegId !== null) {
+    const leg = state.legs.find(l => l.id === state.editingLegId);
+    if (leg) { leg.deg = parsed.deg; leg.min = parsed.min; leg.sec = parsed.sec; leg.dist = dist; }
+    state.editingLegId = null;
+  } else {
+    state.legs.push({ id: legIdCounter++, deg: parsed.deg, min: parsed.min, sec: parsed.sec, dist });
+  }
+  render();
+  // Ready for the next leg immediately
+  requestAnimationFrame(() => {
+    const nextBearing = document.getElementById('in-bearing');
+    if (nextBearing) nextBearing.focus();
+  });
+}
+
+function editLeg(id) {
+  const leg = state.legs.find(l => l.id === id);
+  if (!leg) return;
+  state.editingLegId = id;
+  render();
+  requestAnimationFrame(() => {
+    const bearingEl = document.getElementById('in-bearing');
+    const distEl = document.getElementById('in-dist');
+    if (bearingEl) {
+      bearingEl.value = `${leg.deg}.${String(leg.min).padStart(2,'0')}${String(leg.sec).padStart(2,'0')}`;
+      updateCompassNeedle();
+    }
+    if (distEl) distEl.value = leg.dist;
+    if (bearingEl) { bearingEl.focus(); bearingEl.select(); }
+    document.getElementById('main').scrollTop = 0;
+  });
+}
+
+function cancelEdit() {
+  state.editingLegId = null;
+  render();
+}
+
+function removeLeg(id) {
+  if (state.editingLegId === id) state.editingLegId = null;
+  state.legs = state.legs.filter(l => l.id !== id);
+  render();
+}
+
+/* =========================================================
+   RENDER: CLOSURE TAB
+========================================================= */
+function renderClosure() {
+  if (state.legs.length < 3) {
+    return `<div class="panel">${emptyState('Add at least 3 legs on the Traverse tab to compute closure.')}</div>`;
+  }
+  const { vecs, perimeter, sumLat, sumDep, linearError, precisionDenom, miscloseBearing } = computeClosure();
+  const adj = computeAdjusted();
+
+  const rawRows = vecs.map((v,i)=>`
+    <tr><td class="leg-name">L${i+1}</td><td>${fmt(v.dist,2)}</td><td>${fmt(v.dep,3)}</td><td>${fmt(v.lat,3)}</td></tr>
+  `).join('');
+
+  const compareRows = adj.map((v,i)=>`
+    <tr>
+      <td class="leg-name">L${i+1}</td>
+      <td>${fmtLegBearing(v)}</td>
+      <td>${fmtBearing(v.computedBearing)}</td>
+      <td>${fmt(v.dist,3)}</td>
+      <td>${fmt(v.computedDist,3)}</td>
+    </tr>
+  `).join('');
+
+  return `
+    <div class="panel">
+      <div class="panel-title">Closure Summary</div>
+      <div class="stat-grid">
+        <div class="stat"><div class="stat-label">Linear Misclose</div><div class="stat-val ${linearError<0.05?'good':'accent'}">${fmt(linearError,4)} m</div></div>
+        <div class="stat"><div class="stat-label">Misclose Bearing</div><div class="stat-val accent">${fmtBearing(miscloseBearing)}</div></div>
+        <div class="stat"><div class="stat-label">Perimeter</div><div class="stat-val">${fmt(perimeter,2)} m</div></div>
+        <div class="stat"><div class="stat-label">Precision Ratio</div><div class="stat-val accent">1 : ${Number.isFinite(precisionDenom) ? Math.round(precisionDenom).toLocaleString() : '∞'}</div></div>
+      </div>
+      <div class="small-note">Misclose bearing is the direction from the start point to the computed end point — the closing-error vector. If it lines up with (or opposite to) one leg's bearing, that leg is the more likely place to check for a blunder.</div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">ΔEasting / ΔNorthing per Leg</div>
+      <table>
+        <thead><tr><th>Leg</th><th>Dist</th><th>ΔEasting</th><th>ΔNorthing</th></tr></thead>
+        <tbody>${rawRows}</tbody>
+        <tfoot><tr style="font-weight:700;"><td>Σ</td><td>${fmt(perimeter,2)}</td><td>${fmt(sumDep,3)}</td><td>${fmt(sumLat,3)}</td></tr></tfoot>
+      </table>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">Traverse Adjustment</div>
+      <div class="method-toggle">
+        <button class="${state.method==='compass'?'active':''}" onclick="setMethod('compass')">COMPASS (BOWDITCH)</button>
+        <button class="${state.method==='transit'?'active':''}" onclick="setMethod('transit')">TRANSIT</button>
+      </div>
+      <table>
+        <thead><tr><th>Leg</th><th>Meas. Brg</th><th>Comp. Brg</th><th>Meas. Dist</th><th>Comp. Dist</th></tr></thead>
+        <tbody>${compareRows}</tbody>
+      </table>
+      <div class="small-note">${state.method==='compass'
+        ? 'Compass rule distributes error proportionally to each leg\'s distance — best for traverses measured with uniform-precision equipment.'
+        : 'Transit rule distributes error proportionally to each leg\'s latitude/departure magnitude — better when angles are more precise than distances.'}</div>
+    </div>
+  `;
+}
+function setMethod(m) { state.method = m; render(); }
+
+/* =========================================================
+   RENDER: COORDS / PLOT TAB
+========================================================= */
+function renderCoords() {
+  if (state.legs.length < 3) {
+    return `<div class="panel">${emptyState('Add at least 3 legs to generate coordinates and plot.')}</div>`;
+  }
+  const pts = computeCoordinates();
+  const rows = pts.map(p => `<tr><td>${p.label}</td><td>${fmt(p.n,3)}</td><td>${fmt(p.e,3)}</td></tr>`).join('');
+
+  return `
+    <div class="panel">
+      <div class="panel-title">Starting Coordinate</div>
+      <div class="row">
+        <div>
+          <label class="f">Northing</label>
+          <input id="in-startN" type="number" inputmode="decimal" value="${state.startN}" onchange="updateStart(this)">
+        </div>
+        <div>
+          <label class="f">Easting</label>
+          <input id="in-startE" type="number" inputmode="decimal" value="${state.startE}" onchange="updateStart(this)">
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">Plot (Adjusted Traverse)</div>
+      <div class="plot-wrap">${plotSvg(pts)}</div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">Point Coordinates</div>
+      <table>
+        <thead><tr><th>Point</th><th>Northing</th><th>Easting</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  `;
+}
+function updateStart(el) {
+  if (el.id === 'in-startN') state.startN = Number(el.value)||0;
+  if (el.id === 'in-startE') state.startE = Number(el.value)||0;
+  render();
+}
+
+function plotSvg(pts) {
+  const W = 320, H = 260, pad = 30;
+  const ns = pts.map(p=>p.n), es = pts.map(p=>p.e);
+  const minN = Math.min(...ns), maxN = Math.max(...ns);
+  const minE = Math.min(...es), maxE = Math.max(...es);
+  const rangeN = Math.max(maxN-minN, 0.001), rangeE = Math.max(maxE-minE, 0.001);
+  const scale = Math.min((W-2*pad)/rangeE, (H-2*pad)/rangeN);
+  const cx = (e) => pad + (e-minE)*scale;
+  const cy = (n) => H - pad - (n-minN)*scale; // invert so north is up
+
+  const gridLines = [];
+  for (let i=0;i<=8;i++) {
+    const x = pad + i*(W-2*pad)/8;
+    const y = pad + i*(H-2*pad)/8;
+    gridLines.push(`<line x1="${x}" y1="${pad}" x2="${x}" y2="${H-pad}" stroke="#1E252B" stroke-width="1"/>`);
+    gridLines.push(`<line x1="${pad}" y1="${y}" x2="${W-pad}" y2="${y}" stroke="#1E252B" stroke-width="1"/>`);
+  }
+
+  const pathD = pts.map((p,i)=> `${i===0?'M':'L'} ${cx(p.e).toFixed(1)} ${cy(p.n).toFixed(1)}`).join(' ') +
+    ` L ${cx(pts[0].e).toFixed(1)} ${cy(pts[0].n).toFixed(1)}`;
+
+  const dots = pts.map((p,i)=>`
+    <circle cx="${cx(p.e).toFixed(1)}" cy="${cy(p.n).toFixed(1)}" r="4" fill="${i===0?'#4FD1C5':'#FF7A1A'}" stroke="#14181C" stroke-width="1.5"/>
+    <text x="${cx(p.e).toFixed(1)}" y="${(cy(p.n)-9).toFixed(1)}" text-anchor="middle" font-size="9" fill="#8A93A0" font-family="JetBrains Mono">${p.label.replace(' (Start)','')}</text>
+  `).join('');
+
+  return `<svg width="100%" viewBox="0 0 ${W} ${H}" style="display:block;">
+    ${gridLines.join('')}
+    <path d="${pathD}" fill="none" stroke="#4FD1C5" stroke-width="1.5" stroke-dasharray="4 3"/>
+    ${dots}
+  </svg>`;
+}
+
+/* =========================================================
+   RENDER: MISSING LINE TAB
+========================================================= */
+function renderMissing() {
+  return `
+    <div class="panel">
+      <div class="panel-title">Missing Line Mode</div>
+      <div class="method-toggle-grid">
+        <button class="${state.missingMode==='inverse'?'active':''}" onclick="setMissingMode('inverse')">INVERSE (2 PTS)</button>
+        <button class="${state.missingMode==='closing'?'active':''}" onclick="setMissingMode('closing')">CLOSING LEG</button>
+        <button class="${state.missingMode==='radiation'?'active':''}" onclick="setMissingMode('radiation')">RADIATIONS</button>
+        <button class="${state.missingMode==='compare'?'active':''}" onclick="setMissingMode('compare')">BEARING COMPARE</button>
+      </div>
+      ${state.missingMode === 'inverse' ? renderInverse()
+        : state.missingMode === 'closing' ? renderClosingLeg()
+        : state.missingMode === 'radiation' ? renderRadiation()
+        : renderCompare()}
+    </div>
+  `;
+}
+function setMissingMode(m) { state.missingMode = m; render(); }
+
+function renderInverse() {
+  return `
+    <div class="row">
+      <div><label class="f">N1</label><input id="mi-n1" type="number" inputmode="decimal" placeholder="Northing"></div>
+      <div><label class="f">E1</label><input id="mi-e1" type="number" inputmode="decimal" placeholder="Easting"></div>
+    </div>
+    <div class="row">
+      <div><label class="f">N2</label><input id="mi-n2" type="number" inputmode="decimal" placeholder="Northing"></div>
+      <div><label class="f">E2</label><input id="mi-e2" type="number" inputmode="decimal" placeholder="Easting"></div>
+    </div>
+    <button class="btn-primary" onclick="computeInverse()">CALCULATE</button>
+    <div id="inverse-result"></div>
+    <div class="small-note">Computes the bearing and distance between two known coordinates (point-to-point inverse).</div>
+  `;
+}
+function computeInverse() {
+  const n1 = Number(document.getElementById('mi-n1').value)||0;
+  const e1 = Number(document.getElementById('mi-e1').value)||0;
+  const n2 = Number(document.getElementById('mi-n2').value)||0;
+  const e2 = Number(document.getElementById('mi-e2').value)||0;
+  const r = inverse(n1,e1,n2,e2);
+  document.getElementById('inverse-result').innerHTML = `
+    <div class="divider"></div>
+    <div class="stat-grid">
+      <div class="stat"><div class="stat-label">Bearing</div><div class="stat-val accent">${fmtBearing(r.bearing)}</div></div>
+      <div class="stat"><div class="stat-label">Distance</div><div class="stat-val accent">${fmt(r.dist,3)} m</div></div>
+    </div>
+  `;
+}
+
+function renderClosingLeg() {
+  if (state.legs.length < 2) {
+    return emptyState('Enter at least 2 known legs on the Traverse tab, then use this to solve the unmeasured closing leg.');
+  }
+  const closing = computeClosingLeg();
+  return `
+    <div class="small-note" style="margin-bottom:10px;">Using all ${state.legs.length} legs currently on the Traverse tab as the known sides — solving for the one side needed to close the loop.</div>
+    <div class="stat-grid">
+      <div class="stat"><div class="stat-label">Closing Bearing</div><div class="stat-val accent">${fmtBearing(closing.bearing)}</div></div>
+      <div class="stat"><div class="stat-label">Closing Distance</div><div class="stat-val accent">${fmt(closing.dist,3)} m</div></div>
+    </div>
+  `;
+}
+
+function onPlainBearingInput(el, previewId) {
+  const cleaned = sanitizeBearingInput(el.value);
+  if (cleaned !== el.value) el.value = cleaned;
+  const previewEl = document.getElementById(previewId);
+  if (previewEl) {
+    previewEl.textContent = bearingPreviewText(cleaned);
+    previewEl.classList.toggle('pending', !isBearingComplete(cleaned));
+  }
+}
+
+function renderRadiation() {
+  return `
+    <div class="panel-title" style="font-size:11px;margin-top:2px;">Radiation 1</div>
+    <div class="row">
+      <div>
+        <label class="f">Bearing (DDD.MMSS)</label>
+        <input id="rad1-bearing" class="bearing-input" style="font-size:15px;" type="text" inputmode="decimal" placeholder="e.g. 45.3000" oninput="onPlainBearingInput(this,'rad1-bearing-preview')">
+        <div id="rad1-bearing-preview" class="bearing-preview pending" style="font-size:11px;">Type degrees.minutesseconds</div>
+      </div>
+      <div>
+        <label class="f">Distance (m)</label>
+        <input id="rad1-dist" type="number" inputmode="decimal" placeholder="0.000" step="0.001">
+      </div>
+    </div>
+    <div class="panel-title" style="font-size:11px;margin-top:10px;">Radiation 2</div>
+    <div class="row">
+      <div>
+        <label class="f">Bearing (DDD.MMSS)</label>
+        <input id="rad2-bearing" class="bearing-input" style="font-size:15px;" type="text" inputmode="decimal" placeholder="e.g. 130.1500" oninput="onPlainBearingInput(this,'rad2-bearing-preview')">
+        <div id="rad2-bearing-preview" class="bearing-preview pending" style="font-size:11px;">Type degrees.minutesseconds</div>
+      </div>
+      <div>
+        <label class="f">Distance (m)</label>
+        <input id="rad2-dist" type="number" inputmode="decimal" placeholder="0.000" step="0.001">
+      </div>
+    </div>
+    <button class="btn-primary" onclick="computeRadiation()" style="margin-top:10px;">CALCULATE</button>
+    <div id="radiation-result"></div>
+    <div class="small-note">Computes the bearing and distance between two points radiated (bearing + distance) from the same occupied station.</div>
+  `;
+}
+function computeRadiation() {
+  const b1 = parseDDDMMSS(document.getElementById('rad1-bearing').value);
+  const b2 = parseDDDMMSS(document.getElementById('rad2-bearing').value);
+  if (!b1 || !b2) { flash('Enter both bearings in DDD.MMSS format'); return; }
+  const d1 = Number(document.getElementById('rad1-dist').value)||0;
+  const d2 = Number(document.getElementById('rad2-dist').value)||0;
+  const az1 = dmsToDecimal(b1.deg,b1.min,b1.sec) * Math.PI/180;
+  const az2 = dmsToDecimal(b2.deg,b2.min,b2.sec) * Math.PI/180;
+  const n1 = d1*Math.cos(az1), e1 = d1*Math.sin(az1);
+  const n2 = d2*Math.cos(az2), e2 = d2*Math.sin(az2);
+  const r = inverse(n1,e1,n2,e2);
+  document.getElementById('radiation-result').innerHTML = `
+    <div class="divider"></div>
+    <div class="stat-grid">
+      <div class="stat"><div class="stat-label">Bearing (Pt1 → Pt2)</div><div class="stat-val accent">${fmtBearing(r.bearing)}</div></div>
+      <div class="stat"><div class="stat-label">Distance</div><div class="stat-val accent">${fmt(r.dist,3)} m</div></div>
+    </div>
+  `;
+}
+
+function renderCompare() {
+  return `
+    <div class="row">
+      <div>
+        <label class="f">Bearing A (DDD.MMSS)</label>
+        <input id="cmp-a" class="bearing-input" style="font-size:15px;" type="text" inputmode="decimal" placeholder="e.g. 45.3000" oninput="onPlainBearingInput(this,'cmp-a-preview')">
+        <div id="cmp-a-preview" class="bearing-preview pending" style="font-size:11px;">Type degrees.minutesseconds</div>
+      </div>
+      <div>
+        <label class="f">Bearing B (DDD.MMSS)</label>
+        <input id="cmp-b" class="bearing-input" style="font-size:15px;" type="text" inputmode="decimal" placeholder="e.g. 90.0000" oninput="onPlainBearingInput(this,'cmp-b-preview')">
+        <div id="cmp-b-preview" class="bearing-preview pending" style="font-size:11px;">Type degrees.minutesseconds</div>
+      </div>
+    </div>
+    <button class="btn-primary" onclick="computeCompare()">CALCULATE</button>
+    <div id="compare-result"></div>
+    <div class="small-note">Computes the angle between two bearings — how far, and which way, you'd turn from A to B.</div>
+  `;
+}
+function computeCompare() {
+  const a = parseDDDMMSS(document.getElementById('cmp-a').value);
+  const b = parseDDDMMSS(document.getElementById('cmp-b').value);
+  if (!a || !b) { flash('Enter both bearings in DDD.MMSS format'); return; }
+  const aDec = dmsToDecimal(a.deg,a.min,a.sec);
+  const bDec = dmsToDecimal(b.deg,b.min,b.sec);
+  let diff = bDec - aDec;
+  diff = ((diff + 180) % 360 + 360) % 360 - 180; // signed, -180..180
+  const direction = diff === 0 ? '—' : (diff > 0 ? 'CLOCKWISE' : 'COUNTERCLOCKWISE');
+  document.getElementById('compare-result').innerHTML = `
+    <div class="divider"></div>
+    <div class="stat-grid">
+      <div class="stat"><div class="stat-label">Angle (B − A)</div><div class="stat-val accent">${fmtSignedBearing(diff)}</div></div>
+      <div class="stat"><div class="stat-label">Turn Direction</div><div class="stat-val" style="font-size:13px;">${direction}</div></div>
+    </div>
+  `;
+}
+
+/* =========================================================
+   MAIN RENDER / NAV
+========================================================= */
+function render() {
+  renderHeader();
+  const main = document.getElementById('main');
+  if (state.tab === 'traverse') main.innerHTML = renderTraverse();
+  else if (state.tab === 'closure') main.innerHTML = renderClosure();
+  else if (state.tab === 'coords') main.innerHTML = renderCoords();
+  else if (state.tab === 'missing') main.innerHTML = renderMissing();
+
+  document.querySelectorAll('nav button').forEach(b => {
+    b.classList.toggle('active', b.dataset.tab === state.tab);
+  });
+
+  if (state.tab === 'traverse') {
+    const bearingEl = document.getElementById('in-bearing');
+    if (bearingEl) {
+      bearingEl.addEventListener('input', onBearingInput);
+      updateCompassNeedle();
+    }
+  }
+}
+
+function flash(msg) {
+  const el = document.createElement('div');
+  el.textContent = msg;
+  el.style.cssText = 'position:fixed;top:14px;left:50%;transform:translateX(-50%);background:#FF6B6B;color:#14181C;padding:8px 16px;border-radius:8px;font-size:12px;font-weight:700;z-index:99;font-family:Space Grotesk,sans-serif;';
+  document.body.appendChild(el);
+  setTimeout(()=>el.remove(), 1800);
+}
+
+document.getElementById('bottom-nav').addEventListener('click', (e) => {
+  const btn = e.target.closest('button[data-tab]');
+  if (!btn) return;
+  state.tab = btn.dataset.tab;
+  render();
+  document.getElementById('main').scrollTop = 0;
+});
+
+render();
+</script>
+</body>
+</html>
