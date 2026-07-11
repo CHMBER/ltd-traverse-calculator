@@ -1,4 +1,4 @@
-# Traverse Field Book
+# LTD Traverse Calculator
 
 A single-file field surveying calculator (Traverse entry, Closure/Adjustment, Coordinate
 plotting, Calculator tools) built for offline use on Samsung Android work phones.

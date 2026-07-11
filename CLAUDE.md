@@ -1,4 +1,4 @@
-# Traverse Field Book — Project Context
+# LTD Traverse Calculator — Project Context
 
 A single-file HTML/JS PWA-style field surveying calculator, built for use on Samsung
 Android work phones (installed via "Add to Home Screen" in Chrome, runs offline).
@@ -83,11 +83,20 @@ full-width button below it for the most recently added tool:
 3. Radiations — bearing/distance between two points each defined by bearing+distance
    ("radiated") from the same occupied station.
 4. Bearing Compare — signed angle + turn direction (CW/CCW) between two bearings.
-5. Offset / Chainage — given a baseline (points A→B) and a target point P, computes
-   the chainage (distance along the baseline from A) and the perpendicular offset of
-   P from the line, signed Right/Left as if standing at A facing B. See
-   `computeOffset()` — uses a vector projection (chainage) and 2D cross product
-   (signed offset) over the A→P vector relative to the A→B baseline vector.
+5. Offset / Chainage — a stakeout tool: given a baseline (points A→B), a chainage
+   along it, and a left/right offset from it, computes the target point's N/E. See
+   `computeOffset()` — the target is A plus `chainage` along the baseline's unit
+   vector plus the signed offset along its right-perpendicular unit vector
+   `(-dE/L, dN/L)` (derived from, and consistent with, the sign convention verified
+   during development: facing baseline azimuth θ, "right" is azimuth θ+90°). Each
+   baseline endpoint (A and B) has a `<select>` (`off-a-point`/`off-b-point`,
+   populated by `offsetPointOptions()` from `computeCoordinates()`) letting you pick
+   an existing traverse point instead of retyping its N/E — picking a point fills
+   and read-only-locks the N/E inputs (`onOffsetPointSelect()`); "Custom" unlocks them
+   for manual entry. This was originally the reverse calc (P → chainage/offset); it
+   was changed to this stakeout direction and the old mode was dropped, not kept as
+   a toggle, since that's what was asked for — reintroduce it as a toggle if the
+   locate-a-point-on-a-baseline direction turns out to be needed too.
    Internal identifiers still say `calcMode`/`renderCalculator`/`setCalcMode` (renamed
    from the old `missingMode`/`renderMissing`/`setMissingMode` together with the UI
    label) — keep code and UI names in sync here, unlike the intentional lat/dep vs
@@ -96,16 +105,26 @@ full-width button below it for the most recently added tool:
 ## Known limitations / likely next steps
 
 - **Persistence (localStorage) is now implemented.** State auto-saves to `localStorage`
-  (key `traverseFieldBook.v1`) on every data-mutating action — add/edit/delete leg,
+  (key `traverseFieldBook.v1` — kept as-is despite the app's later rename to "LTD
+  Traverse Calculator", so any already-saved field job isn't silently orphaned under
+  a key nothing looks for anymore) on every data-mutating action — add/edit/delete leg,
   method toggle, start coordinate change, backsight fields — via `saveState()`, and
   restores on page load via `loadState()` (both near the top of the script, right after
   the `state` object). Tab switches and other pure-navigation renders do NOT trigger a
   save, so `saveState()` is called explicitly from each mutating function rather than
   hooked into `render()` globally — keep that pattern if you add new state-mutating
   actions. The header's "NEW JOB" button (`resetJob()`) wipes it with a `confirm()`
-  prompt. Still missing: JSON/CSV export-import so a job can be backed up or moved
-  between devices, and IndexedDB if job size ever outgrows localStorage's ~5MB limit
-  (unlikely for a single traverse, but worth knowing).
+  prompt, to a genuinely empty job (no legs) — it does NOT reload the sample job below.
+  Still missing: JSON/CSV export-import so a job can be backed up or moved between
+  devices, and IndexedDB if job size ever outgrows localStorage's ~5MB limit (unlikely
+  for a single traverse, but worth knowing).
+- **First-ever load seeds a sample job.** If `loadState()` finds no saved data at all
+  (fresh install, or storage was cleared outside the app), it calls `loadSampleJob()` —
+  a small closed 4-leg traverse (~0.8 ha, closes to within 0.4mm, so the Closure tab
+  shows a realistic "CLOSED" badge rather than an empty state) — and saves it, so the
+  app is never a blank slate the very first time someone opens it. This is distinct
+  from `resetJob()`, which always clears to genuinely empty. If you add more sample
+  data (e.g. to demo backsight or the Calculator tools), extend `loadSampleJob()`.
 - **No true PWA manifest/service worker yet** — currently works via "Add to Home Screen"
   in Chrome but isn't a real installable/offline-cached PWA. Needs `manifest.json` +
   a service worker for real offline reliability.

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
-<title>Traverse Field Book</title>
+<title>LTD Traverse Calculator</title>
 <style>
   :root {
     /* Brand: navy + yellow/gold + metallic silver */
@@ -113,6 +113,7 @@
     outline: none;
   }
   input:focus, select:focus { border-color: var(--accent); }
+  input:read-only { color: var(--text-secondary); background: var(--panel-bg); }
   select { font-family: inherit; -webkit-appearance: none; appearance: none;
     background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6'><path d='M0 0l5 6 5-6z' fill='%238A93A0'/></svg>");
     background-repeat: no-repeat; background-position: right 10px center; padding-right: 26px;
@@ -196,7 +197,7 @@
 <div id="app">
   <div class="brand-strip"></div>
   <header>
-    <h1 id="proj-name">TRAVERSE FIELD BOOK</h1>
+    <h1 id="proj-name">LTD TRAVERSE CALCULATOR</h1>
     <div class="status-row">
       <div class="status-left">
         <span id="badge-container"></span>
@@ -271,10 +272,23 @@ function saveState() {
   } catch (e) { /* storage unavailable (private browsing, quota) — fail silently */ }
 }
 
+// Small closed 4-leg traverse (~0.8 ha, closes to within 0.4mm) shown on a genuinely
+// fresh install — a real "NEW JOB" reset still clears to a truly empty state, this is
+// only so the app isn't a blank slate the very first time it's opened.
+function loadSampleJob() {
+  state.legs = [
+    { id: 1, deg: 45,  min: 30, sec: 0,  dist: '120.500' },
+    { id: 2, deg: 142, min: 15, sec: 30, dist: '95.750' },
+    { id: 3, deg: 250, min: 0,  sec: 45, dist: '110.250' },
+    { id: 4, deg: 305, min: 15, sec: 16, dist: '50.142' }
+  ];
+  legIdCounter = 5;
+}
+
 function loadState() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return;
+    if (!raw) { loadSampleJob(); saveState(); return; }
     const data = JSON.parse(raw);
     if (Array.isArray(data.legs)) state.legs = data.legs;
     if (data.method === 'compass' || data.method === 'transit') state.method = data.method;
@@ -1081,47 +1095,90 @@ function computeCompare() {
   `;
 }
 
+// Options for the baseline point-picker <select>s — lets a baseline endpoint be
+// pulled straight from the traverse's own computed coordinates instead of retyped.
+function offsetPointOptions() {
+  return computeCoordinates()
+    .map((p,i) => `<option value="${i}">${p.label} — N ${fmt(p.n,2)}, E ${fmt(p.e,2)}</option>`)
+    .join('');
+}
+
 function renderOffset() {
+  const pointOptions = offsetPointOptions();
   return `
     <div class="panel-title panel-title-sm">Baseline Start (A)</div>
+    <label class="f">Traverse Point</label>
+    <select id="off-a-point" onchange="onOffsetPointSelect('a', this)" style="margin-bottom:8px;">
+      <option value="custom" selected>Custom (type N/E)</option>
+      ${pointOptions}
+    </select>
     <div class="row">
       <div><label class="f">Northing</label><input id="off-an" type="number" inputmode="decimal" placeholder="Northing"></div>
       <div><label class="f">Easting</label><input id="off-ae" type="number" inputmode="decimal" placeholder="Easting"></div>
     </div>
     <div class="panel-title panel-title-sm" style="margin-top:10px;">Baseline End (B)</div>
+    <label class="f">Traverse Point</label>
+    <select id="off-b-point" onchange="onOffsetPointSelect('b', this)" style="margin-bottom:8px;">
+      <option value="custom" selected>Custom (type N/E)</option>
+      ${pointOptions}
+    </select>
     <div class="row">
       <div><label class="f">Northing</label><input id="off-bn" type="number" inputmode="decimal" placeholder="Northing"></div>
       <div><label class="f">Easting</label><input id="off-be" type="number" inputmode="decimal" placeholder="Easting"></div>
     </div>
-    <div class="panel-title panel-title-sm" style="margin-top:10px;">Target Point (P)</div>
+    <div class="panel-title panel-title-sm" style="margin-top:10px;">Chainage &amp; Offset</div>
     <div class="row">
-      <div><label class="f">Northing</label><input id="off-pn" type="number" inputmode="decimal" placeholder="Northing"></div>
-      <div><label class="f">Easting</label><input id="off-pe" type="number" inputmode="decimal" placeholder="Easting"></div>
+      <div><label class="f">Chainage from A (m)</label><input id="off-chainage" type="number" inputmode="decimal" placeholder="0.000" step="0.001"></div>
+      <div><label class="f">Offset (m)</label><input id="off-offset-mag" type="number" inputmode="decimal" placeholder="0.000" step="0.001"></div>
     </div>
+    <label class="f">Side (facing A→B)</label>
+    <select id="off-side">
+      <option value="right" selected>Right</option>
+      <option value="left">Left</option>
+    </select>
     <button class="btn-primary" onclick="computeOffset()" style="margin-top:10px;">CALCULATE</button>
     <div id="offset-result"></div>
-    <div class="small-note">Computes the chainage (distance along the baseline, measured from A) and the perpendicular offset of point P from line A→B. Offset is signed Right/Left as if standing at A facing B.</div>
+    <div class="small-note">Computes the coordinates of a target point set out a given chainage along baseline A→B, offset left or right of it. Baseline points can be typed manually or picked from the traverse's own computed coordinates.</div>
   `;
 }
+
+function onOffsetPointSelect(which, selectEl) {
+  const nEl = document.getElementById(`off-${which}n`);
+  const eEl = document.getElementById(`off-${which}e`);
+  if (selectEl.value === 'custom') {
+    nEl.readOnly = false;
+    eEl.readOnly = false;
+  } else {
+    const pt = computeCoordinates()[Number(selectEl.value)];
+    if (!pt) return;
+    nEl.value = pt.n.toFixed(3);
+    eEl.value = pt.e.toFixed(3);
+    nEl.readOnly = true;
+    eEl.readOnly = true;
+  }
+}
+
 function computeOffset() {
   const an = Number(document.getElementById('off-an').value)||0;
   const ae = Number(document.getElementById('off-ae').value)||0;
   const bn = Number(document.getElementById('off-bn').value)||0;
   const be = Number(document.getElementById('off-be').value)||0;
-  const pn = Number(document.getElementById('off-pn').value)||0;
-  const pe = Number(document.getElementById('off-pe').value)||0;
   const dN = bn-an, dE = be-ae;
   const baseLen = Math.sqrt(dN*dN + dE*dE);
   if (baseLen === 0) { flash('Baseline points A and B must be different'); return; }
-  const apN = pn-an, apE = pe-ae;
-  const chainage = (apN*dN + apE*dE) / baseLen;
-  const offset = (dN*apE - dE*apN) / baseLen; // +right / -left of A→B
-  const side = offset > 1e-9 ? 'RIGHT' : offset < -1e-9 ? 'LEFT' : 'ON LINE';
+  const chainage = Number(document.getElementById('off-chainage').value)||0;
+  const offsetMag = Math.abs(Number(document.getElementById('off-offset-mag').value)||0);
+  const side = document.getElementById('off-side').value;
+  const signedOffset = side === 'left' ? -offsetMag : offsetMag; // +right / -left of A→B
+  // Target = A + chainage along the baseline's unit vector, + signed offset along
+  // its right-perpendicular unit vector (-dE/L, dN/L) — see CLAUDE.md for the derivation.
+  const targetN = an + (chainage*dN - signedOffset*dE) / baseLen;
+  const targetE = ae + (chainage*dE + signedOffset*dN) / baseLen;
   document.getElementById('offset-result').innerHTML = `
     <div class="divider"></div>
     <div class="stat-grid">
-      <div class="stat"><div class="stat-label">Chainage (from A)</div><div class="stat-val accent">${fmt(chainage,3)} m</div></div>
-      <div class="stat"><div class="stat-label">Offset</div><div class="stat-val accent">${fmt(Math.abs(offset),3)} m ${side!=='ON LINE'?side:''}</div></div>
+      <div class="stat"><div class="stat-label">Target Northing</div><div class="stat-val accent">${fmt(targetN,3)}</div></div>
+      <div class="stat"><div class="stat-label">Target Easting</div><div class="stat-val accent">${fmt(targetE,3)}</div></div>
     </div>
   `;
 }
