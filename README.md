@@ -1,7 +1,7 @@
 # Traverse Field Book
 
 A single-file field surveying calculator (Traverse entry, Closure/Adjustment, Coordinate
-plotting, Missing Line) built for offline use on Samsung Android work phones.
+plotting, Calculator tools) built for offline use on Samsung Android work phones.
 
 ## Running it
 

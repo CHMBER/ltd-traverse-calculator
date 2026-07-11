@@ -26,8 +26,8 @@ it first, since the deployment model (copy one file to a phone) depends on it.
   the math functions but UI labels always say "ΔNorthing"/"ΔEasting" — surveyor-facing
   language should stay in Northing/Easting, not the old lat/dep jargon.
 - Design system: dark navy-black background, Parker Scanlon brand palette — navy
-  (`#1B3B6F`) and gold/yellow (`#FFC220`) as the primary accents, metallic silver
-  (`#C9D0D8`) as the secondary/data accent. All colors are CSS custom properties on
+  (`#1B3B6F`) and gold/yellow (`#FFC220`) as the primary accents, a bright aluminum
+  silver (`#E4E7EA`) as the secondary/data accent. All colors are CSS custom properties on
   `:root` (`--accent`, `--accent-2`, `--navy`, etc.) — inline SVGs (compass, plot)
   reference the same `var(--x)` values rather than duplicating hex codes, so the
   palette only needs to change in one place. A 3px navy→yellow→silver gradient strip
@@ -65,17 +65,33 @@ it first, since the deployment model (copy one file to a phone) depends on it.
 - Traverse Adjustment: Compass (Bowditch) or Transit rule toggle. Table shows Measured vs
   Computed bearing/distance per leg (computed = derived from the adjusted lat/dep, not the
   correction values directly — more intuitive for field use than showing raw corrections).
+- Enclosed Area (m² and hectares), via `computeArea()` — shoelace formula over the
+  *adjusted* (closed) traverse polygon, built from relative coordinates starting at
+  (0,0) since area is translation-invariant and shouldn't depend on the Coordinates
+  tab's starting N/E. Shown as its own stat-grid below the main Closure Summary grid
+  (kept separate rather than appended to that 4-stat grid, to avoid disturbing its
+  documented Linear Misclose / Misclose Bearing / Perimeter / Precision Ratio order).
 
 **Coordinates / Plot tab**
 - User-set starting N/E. Full coordinate table + SVG grid-paper-style plot of the adjusted
   traverse loop.
 
-**Missing Line tab** — 4 modes in a 2×2 toggle grid:
+**Calculator tab** (formerly "Missing Line") — 5 modes: a 2×2 toggle grid plus one
+full-width button below it for the most recently added tool:
 1. Inverse (2 Pts) — bearing/distance between two known N/E coordinates.
 2. Closing Leg — same calc as the live Traverse tab panel, shown standalone here too.
 3. Radiations — bearing/distance between two points each defined by bearing+distance
    ("radiated") from the same occupied station.
 4. Bearing Compare — signed angle + turn direction (CW/CCW) between two bearings.
+5. Offset / Chainage — given a baseline (points A→B) and a target point P, computes
+   the chainage (distance along the baseline from A) and the perpendicular offset of
+   P from the line, signed Right/Left as if standing at A facing B. See
+   `computeOffset()` — uses a vector projection (chainage) and 2D cross product
+   (signed offset) over the A→P vector relative to the A→B baseline vector.
+   Internal identifiers still say `calcMode`/`renderCalculator`/`setCalcMode` (renamed
+   from the old `missingMode`/`renderMissing`/`setMissingMode` together with the UI
+   label) — keep code and UI names in sync here, unlike the intentional lat/dep vs
+   Northing/Easting split elsewhere in this file.
 
 ## Known limitations / likely next steps
 
@@ -96,7 +112,8 @@ it first, since the deployment model (copy one file to a phone) depends on it.
 - The Backsight Orientation Check (Traverse tab) is currently self-contained and does NOT
   feed into the Closure tab's stats. Wiring the finishing-backsight misclosure into the
   Closure summary was discussed as a possible next step but not yet built.
-- Missing Line calculators are stateless scratch pads (values aren't saved to `state`,
+- Calculator tab tools are stateless scratch pads (values aren't saved to `state`,
   just read from the DOM on "Calculate" click) — fine for a quick calculator, but worth
-  knowing if you're looking for where that data "lives."
+  knowing if you're looking for where that data "lives." `state.calcMode` (which
+  sub-tool is active) also isn't persisted to localStorage, consistent with this.
 - No multi-job / multi-file support — one traverse per session.

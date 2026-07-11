@@ -222,9 +222,9 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4v16h16"/><circle cx="9" cy="14" r="1.5" fill="currentColor"/><circle cx="14" cy="8" r="1.5" fill="currentColor"/><circle cx="18" cy="12" r="1.5" fill="currentColor"/></svg>
       PLOT
     </button>
-    <button data-tab="missing">
+    <button data-tab="calculator">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 3v18M15 3v18M3 9h18M3 15h18" stroke-dasharray="2 2"/></svg>
-      MISSING
+      CALCULATOR
     </button>
   </nav>
 </div>
@@ -239,7 +239,7 @@ const state = {
   method: 'compass',  // 'compass' | 'transit'
   startN: 1000.000,
   startE: 1000.000,
-  missingMode: 'inverse',
+  calcMode: 'inverse',
   editingLegId: null,
   backsight: {
     startEnabled: false, startKnown: '', startObserved: '',
@@ -403,6 +403,22 @@ function computeCoordinates() {
     pts.push({ label: `P${i+1}`, n, e });
   });
   return pts;
+}
+
+// Enclosed area of the adjusted (closed) traverse polygon, via the shoelace formula.
+// Uses relative coordinates from (0,0) since area is translation-invariant —
+// doesn't depend on the Coordinates tab's starting N/E.
+function computeArea() {
+  const adj = computeAdjusted();
+  let n = 0, e = 0;
+  const pts = [{ n, e }];
+  adj.forEach(v => { n += v.adjLat; e += v.adjDep; pts.push({ n, e }); });
+  let sum = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[i], b = pts[(i+1) % pts.length];
+    sum += a.e*b.n - b.e*a.n;
+  }
+  return Math.abs(sum) / 2;
 }
 
 function inverse(n1,e1,n2,e2) {
@@ -758,6 +774,7 @@ function renderClosure() {
   }
   const { vecs, perimeter, sumLat, sumDep, linearError, precisionDenom, miscloseBearing } = computeClosure();
   const adj = computeAdjusted();
+  const area = computeArea();
 
   const rawRows = vecs.map((v,i)=>`
     <tr><td class="leg-name">L${i+1}</td><td>${fmt(v.dist,2)}</td><td>${fmt(v.dep,3)}</td><td>${fmt(v.lat,3)}</td></tr>
@@ -783,6 +800,11 @@ function renderClosure() {
         <div class="stat"><div class="stat-label">Precision Ratio</div><div class="stat-val accent">1 : ${Number.isFinite(precisionDenom) ? Math.round(precisionDenom).toLocaleString() : '∞'}</div></div>
       </div>
       <div class="small-note">Misclose bearing is the direction from the start point to the computed end point — the closing-error vector. If it lines up with (or opposite to) one leg's bearing, that leg is the more likely place to check for a blunder.</div>
+      <div class="stat-grid" style="margin-top:8px;">
+        <div class="stat"><div class="stat-label">Enclosed Area (m²)</div><div class="stat-val accent">${fmt(area,2)}</div></div>
+        <div class="stat"><div class="stat-label">Enclosed Area (ha)</div><div class="stat-val accent">${fmt(area/10000,4)}</div></div>
+      </div>
+      <div class="small-note">Area is computed from the adjusted (closed) traverse polygon via the shoelace formula.</div>
     </div>
 
     <div class="panel">
@@ -892,26 +914,30 @@ function plotSvg(pts) {
 }
 
 /* =========================================================
-   RENDER: MISSING LINE TAB
+   RENDER: CALCULATOR TAB
 ========================================================= */
-function renderMissing() {
+function renderCalculator() {
   return `
     <div class="panel">
-      <div class="panel-title">Missing Line Mode</div>
+      <div class="panel-title">Calculator Mode</div>
       <div class="method-toggle-grid">
-        <button class="${state.missingMode==='inverse'?'active':''}" onclick="setMissingMode('inverse')">INVERSE (2 PTS)</button>
-        <button class="${state.missingMode==='closing'?'active':''}" onclick="setMissingMode('closing')">CLOSING LEG</button>
-        <button class="${state.missingMode==='radiation'?'active':''}" onclick="setMissingMode('radiation')">RADIATIONS</button>
-        <button class="${state.missingMode==='compare'?'active':''}" onclick="setMissingMode('compare')">BEARING COMPARE</button>
+        <button class="${state.calcMode==='inverse'?'active':''}" onclick="setCalcMode('inverse')">INVERSE (2 PTS)</button>
+        <button class="${state.calcMode==='closing'?'active':''}" onclick="setCalcMode('closing')">CLOSING LEG</button>
+        <button class="${state.calcMode==='radiation'?'active':''}" onclick="setCalcMode('radiation')">RADIATIONS</button>
+        <button class="${state.calcMode==='compare'?'active':''}" onclick="setCalcMode('compare')">BEARING COMPARE</button>
       </div>
-      ${state.missingMode === 'inverse' ? renderInverse()
-        : state.missingMode === 'closing' ? renderClosingLeg()
-        : state.missingMode === 'radiation' ? renderRadiation()
-        : renderCompare()}
+      <div class="method-toggle-grid" style="grid-template-columns:1fr;">
+        <button class="${state.calcMode==='offset'?'active':''}" onclick="setCalcMode('offset')">OFFSET / CHAINAGE</button>
+      </div>
+      ${state.calcMode === 'inverse' ? renderInverse()
+        : state.calcMode === 'closing' ? renderClosingLeg()
+        : state.calcMode === 'radiation' ? renderRadiation()
+        : state.calcMode === 'compare' ? renderCompare()
+        : renderOffset()}
     </div>
   `;
 }
-function setMissingMode(m) { state.missingMode = m; render(); }
+function setCalcMode(m) { state.calcMode = m; render(); }
 
 function renderInverse() {
   return `
@@ -1055,6 +1081,51 @@ function computeCompare() {
   `;
 }
 
+function renderOffset() {
+  return `
+    <div class="panel-title panel-title-sm">Baseline Start (A)</div>
+    <div class="row">
+      <div><label class="f">Northing</label><input id="off-an" type="number" inputmode="decimal" placeholder="Northing"></div>
+      <div><label class="f">Easting</label><input id="off-ae" type="number" inputmode="decimal" placeholder="Easting"></div>
+    </div>
+    <div class="panel-title panel-title-sm" style="margin-top:10px;">Baseline End (B)</div>
+    <div class="row">
+      <div><label class="f">Northing</label><input id="off-bn" type="number" inputmode="decimal" placeholder="Northing"></div>
+      <div><label class="f">Easting</label><input id="off-be" type="number" inputmode="decimal" placeholder="Easting"></div>
+    </div>
+    <div class="panel-title panel-title-sm" style="margin-top:10px;">Target Point (P)</div>
+    <div class="row">
+      <div><label class="f">Northing</label><input id="off-pn" type="number" inputmode="decimal" placeholder="Northing"></div>
+      <div><label class="f">Easting</label><input id="off-pe" type="number" inputmode="decimal" placeholder="Easting"></div>
+    </div>
+    <button class="btn-primary" onclick="computeOffset()" style="margin-top:10px;">CALCULATE</button>
+    <div id="offset-result"></div>
+    <div class="small-note">Computes the chainage (distance along the baseline, measured from A) and the perpendicular offset of point P from line A→B. Offset is signed Right/Left as if standing at A facing B.</div>
+  `;
+}
+function computeOffset() {
+  const an = Number(document.getElementById('off-an').value)||0;
+  const ae = Number(document.getElementById('off-ae').value)||0;
+  const bn = Number(document.getElementById('off-bn').value)||0;
+  const be = Number(document.getElementById('off-be').value)||0;
+  const pn = Number(document.getElementById('off-pn').value)||0;
+  const pe = Number(document.getElementById('off-pe').value)||0;
+  const dN = bn-an, dE = be-ae;
+  const baseLen = Math.sqrt(dN*dN + dE*dE);
+  if (baseLen === 0) { flash('Baseline points A and B must be different'); return; }
+  const apN = pn-an, apE = pe-ae;
+  const chainage = (apN*dN + apE*dE) / baseLen;
+  const offset = (dN*apE - dE*apN) / baseLen; // +right / -left of A→B
+  const side = offset > 1e-9 ? 'RIGHT' : offset < -1e-9 ? 'LEFT' : 'ON LINE';
+  document.getElementById('offset-result').innerHTML = `
+    <div class="divider"></div>
+    <div class="stat-grid">
+      <div class="stat"><div class="stat-label">Chainage (from A)</div><div class="stat-val accent">${fmt(chainage,3)} m</div></div>
+      <div class="stat"><div class="stat-label">Offset</div><div class="stat-val accent">${fmt(Math.abs(offset),3)} m ${side!=='ON LINE'?side:''}</div></div>
+    </div>
+  `;
+}
+
 /* =========================================================
    MAIN RENDER / NAV
 ========================================================= */
@@ -1064,7 +1135,7 @@ function render() {
   if (state.tab === 'traverse') main.innerHTML = renderTraverse();
   else if (state.tab === 'closure') main.innerHTML = renderClosure();
   else if (state.tab === 'coords') main.innerHTML = renderCoords();
-  else if (state.tab === 'missing') main.innerHTML = renderMissing();
+  else if (state.tab === 'calculator') main.innerHTML = renderCalculator();
 
   document.querySelectorAll('nav button').forEach(b => {
     b.classList.toggle('active', b.dataset.tab === state.tab);
