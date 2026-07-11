@@ -62,9 +62,27 @@ it first, since the deployment model (copy one file to a phone) depends on it.
     which compares an independently-known control bearing against what was actually
     observed — that's real, this derived-from-bearings approach is not.
 - ΔEasting/ΔNorthing per-leg table with a Σ sum row.
-- Traverse Adjustment: Compass (Bowditch) or Transit rule toggle. Table shows Measured vs
-  Computed bearing/distance per leg (computed = derived from the adjusted lat/dep, not the
-  correction values directly — more intuitive for field use than showing raw corrections).
+- Traverse Adjustment: Compass (Bowditch) or Least Squares toggle (`state.method` —
+  `'compass' | 'leastSquares'`; the old Transit rule was dropped entirely per request,
+  not kept as a third option). Table shows Measured vs Computed bearing/distance per
+  leg (computed = derived from the adjusted lat/dep, not the correction values
+  directly — more intuitive for field use than showing raw corrections).
+  - **Least Squares** (`computeLeastSquaresCorrections()` / `legCovariance()`, both
+    just above `computeAdjusted()`) is a real rigorous adjustment, not a bigger Compass
+    rule: each leg gets a 2×2 (N,E) covariance matrix propagated from assumed distance
+    precision (error along the leg's own direction) and assumed azimuth precision
+    (error transverse to it, growing with leg length — `LS_SIGMA_DIST_CONST`/
+    `_PPM`/`LS_SIGMA_AZIMUTH_ARCSEC` near the top of that block, defaulted to a modern
+    total station's ~5mm+5ppm / ~5″ and easy to retune there). For a single closed
+    loop the constrained-least-squares solution has a closed form — no iterative
+    solver or full normal-equations matrix — via Lagrange multipliers: with per-leg
+    covariance `C_i` and misclosure vector `L = (-sumLat, -sumDep)`, the correction is
+    `v_i = C_i · (ΣC_i)⁻¹ · L`. Verified numerically: corrections always sum to
+    exactly cancel the misclosure (to floating-point precision), and the distribution
+    is genuinely different from Compass rule's pure distance-proportionality (it also
+    weighs each leg's azimuth relative to the misclosure direction) — Compass rule
+    falls out as the special case where every leg's covariance is isotropic and
+    scales with distance, which is a decent sanity check if this ever needs revisiting.
 - Enclosed Area (m² and hectares), via `computeArea()` — shoelace formula over the
   *adjusted* (closed) traverse polygon, built from relative coordinates starting at
   (0,0) since area is translation-invariant and shouldn't depend on the Coordinates

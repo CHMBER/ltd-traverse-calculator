@@ -237,7 +237,7 @@
 const state = {
   tab: 'traverse',
   legs: [],          // {id, deg, min, sec, dist} — deg/min/sec is a whole-circle azimuth (0-360)
-  method: 'compass',  // 'compass' | 'transit'
+  method: 'compass',  // 'compass' | 'leastSquares'
   startN: 1000.000,
   startE: 1000.000,
   calcMode: 'inverse',
@@ -291,7 +291,7 @@ function loadState() {
     if (!raw) { loadSampleJob(); saveState(); return; }
     const data = JSON.parse(raw);
     if (Array.isArray(data.legs)) state.legs = data.legs;
-    if (data.method === 'compass' || data.method === 'transit') state.method = data.method;
+    if (data.method === 'compass' || data.method === 'leastSquares') state.method = data.method;
     if (typeof data.startN === 'number') state.startN = data.startN;
     if (typeof data.startE === 'number') state.startE = data.startE;
     if (data.backsight) state.backsight = { ...state.backsight, ...data.backsight };
@@ -386,19 +386,66 @@ function computeClosure() {
   return { vecs, perimeter, sumLat, sumDep, linearError, precisionDenom, miscloseAz, miscloseBearing };
 }
 
+// Assumed instrument precision for the Least Squares adjustment. There's no per-leg
+// precision entry in the UI, so these are fixed defaults for a modern total station
+// (~5mm+5ppm distances, ~5" angles) — tune here if your equipment differs materially.
+const LS_SIGMA_DIST_CONST = 0.005;   // m
+const LS_SIGMA_DIST_PPM = 0.000005;  // per m of distance
+const LS_SIGMA_AZIMUTH_ARCSEC = 5;
+const LS_SIGMA_AZIMUTH_RAD = LS_SIGMA_AZIMUTH_ARCSEC * Math.PI / (180 * 3600);
+
+// Per-leg 2x2 (N,E) covariance matrix, propagated from assumed distance precision
+// (error along the leg's own direction) and azimuth precision (error transverse to
+// it, growing with leg length since a fixed angular error displaces a long leg's
+// endpoint more than a short one) — then rotated from the leg's along/across frame
+// into global N/E via the leg's azimuth. See CLAUDE.md for the derivation.
+function legCovariance(v) {
+  const az = v.az * Math.PI/180;
+  const c = Math.cos(az), s = Math.sin(az);
+  const sigD = LS_SIGMA_DIST_CONST + LS_SIGMA_DIST_PPM * v.dist;
+  const sigT = v.dist * LS_SIGMA_AZIMUTH_RAD;
+  const sigD2 = sigD*sigD, sigT2 = sigT*sigT;
+  return {
+    nn: c*c*sigD2 + s*s*sigT2,
+    ne: c*s*(sigD2 - sigT2),
+    ee: s*s*sigD2 + c*c*sigT2
+  };
+}
+
+// Rigorous least-squares closure adjustment for a single closed loop: minimize the
+// weighted sum of squared per-leg corrections subject to the corrections summing to
+// exactly cancel the misclosure. With per-leg covariance C_i and misclosure vector L,
+// the closed-form solution (via Lagrange multipliers) is v_i = C_i * (ΣC_i)^-1 * L —
+// no iterative solver or full normal-equations matrix needed since a single loop only
+// has one 2x2 constraint. Reduces to the Compass rule as a special case when every
+// leg's covariance is isotropic and proportional to its distance.
+function computeLeastSquaresCorrections(vecs, sumLat, sumDep) {
+  const covs = vecs.map(legCovariance);
+  let Snn = 0, Sne = 0, See = 0;
+  covs.forEach(c => { Snn += c.nn; Sne += c.ne; See += c.ee; });
+  const det = Snn*See - Sne*Sne;
+  if (det === 0) return vecs.map(() => ({ corrLat: 0, corrDep: 0 }));
+  const Ln = -sumLat, Le = -sumDep;
+  const lamN = (See*Ln - Sne*Le) / det;
+  const lamE = (-Sne*Ln + Snn*Le) / det;
+  return covs.map(c => ({
+    corrLat: c.nn*lamN + c.ne*lamE,
+    corrDep: c.ne*lamN + c.ee*lamE
+  }));
+}
+
 function computeAdjusted() {
   const { vecs, perimeter, sumLat, sumDep } = computeClosure();
-  const sumAbsLat = vecs.reduce((s,v)=>s+Math.abs(v.lat),0);
-  const sumAbsDep = vecs.reduce((s,v)=>s+Math.abs(v.dep),0);
+  const lsCorrections = state.method === 'leastSquares' ? computeLeastSquaresCorrections(vecs, sumLat, sumDep) : null;
 
-  return vecs.map(v => {
+  return vecs.map((v, i) => {
     let corrLat, corrDep;
     if (state.method === 'compass') {
       corrLat = perimeter > 0 ? -sumLat * (v.dist/perimeter) : 0;
       corrDep = perimeter > 0 ? -sumDep * (v.dist/perimeter) : 0;
     } else {
-      corrLat = sumAbsLat > 0 ? -sumLat * (Math.abs(v.lat)/sumAbsLat) : 0;
-      corrDep = sumAbsDep > 0 ? -sumDep * (Math.abs(v.dep)/sumAbsDep) : 0;
+      corrLat = lsCorrections[i].corrLat;
+      corrDep = lsCorrections[i].corrDep;
     }
     const adjLat = v.lat+corrLat, adjDep = v.dep+corrDep;
     const computedDist = Math.sqrt(adjLat*adjLat + adjDep*adjDep);
@@ -834,7 +881,7 @@ function renderClosure() {
       <div class="panel-title">Traverse Adjustment</div>
       <div class="method-toggle">
         <button class="${state.method==='compass'?'active':''}" onclick="setMethod('compass')">COMPASS (BOWDITCH)</button>
-        <button class="${state.method==='transit'?'active':''}" onclick="setMethod('transit')">TRANSIT</button>
+        <button class="${state.method==='leastSquares'?'active':''}" onclick="setMethod('leastSquares')">LEAST SQUARES</button>
       </div>
       <table>
         <thead><tr><th>Leg</th><th>Meas. Brg</th><th>Comp. Brg</th><th>Meas. Dist</th><th>Comp. Dist</th></tr></thead>
@@ -842,7 +889,7 @@ function renderClosure() {
       </table>
       <div class="small-note">${state.method==='compass'
         ? 'Compass rule distributes error proportionally to each leg\'s distance — best for traverses measured with uniform-precision equipment.'
-        : 'Transit rule distributes error proportionally to each leg\'s latitude/departure magnitude — better when angles are more precise than distances.'}</div>
+        : 'Least squares distributes error using each leg\'s propagated distance and azimuth precision (assumes ~5mm+5ppm distances, ~5″ angles) and its direction relative to the misclosure — the statistically rigorous method, and the better choice for a modern total station.'}</div>
     </div>
   `;
 }
