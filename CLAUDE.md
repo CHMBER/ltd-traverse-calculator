@@ -25,6 +25,20 @@ update the live site.
   `isBearingComplete()`. Trailing digits are optional and pad-right with zero
   (`45.3` → 45°30'00"), not left — this matches how field data collectors are typically
   used.
+- `azimuthToBearing()` (decimal degrees → `{deg,min,sec}` for display, used everywhere
+  a computed bearing is shown — Misclose Bearing, Closing Leg, Comp. Brg, Inverse/
+  Radiation/Offset results) rounds once at the arcsecond level (`Math.round(az*3600)`)
+  and decomposes via integer division/modulo. Previously it floored degrees, floored
+  minutes, then separately rounded seconds — that cascading floor+floor+round could
+  produce an invalid carry like `29'60"` instead of `30'00"` whenever the true value's
+  fractional second was ≥59.5. Found and fixed during a user report of a small (~10″,
+  ~1mm) discrepancy against CAD; this specific bug turned out not to explain that
+  particular report (it only affects bearing *display* formatting, not `linearError`
+  or any other internal math — verified the core closure formulas independently
+  against hand-calculated cases, exact match to full floating-point precision), but
+  was a real, confirmable bug worth fixing regardless. If you touch this function
+  again, round once at the finest unit before decomposing — don't round each of
+  deg/min/sec separately.
 - Coordinates are Northing/Easting (`n`, `e`), not X/Y — surveying convention.
 - `dist * cos(az)` = ΔNorthing ("lat" in the code, legacy compass-rule terminology),
   `dist * sin(az)` = ΔEasting ("dep"). This naming (`lat`/`dep`) is used internally in

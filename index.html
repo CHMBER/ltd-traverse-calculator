@@ -344,10 +344,15 @@ function isBearingComplete(raw) {
 
 function azimuthToBearing(az) {
   az = ((az % 360) + 360) % 360;
-  const deg = Math.floor(az);
-  const minFull = (az - deg) * 60;
-  const min = Math.floor(minFull);
-  const sec = Math.round((minFull - min) * 60);
+  // Round once at the finest unit (arcseconds), then decompose — rounding deg/min/sec
+  // separately (floor, floor, round) can cascade into an invalid carry, e.g. seconds
+  // rounding up to 60 instead of carrying into the next minute.
+  let totalSec = Math.round(az * 3600);
+  if (totalSec >= 360 * 3600) totalSec -= 360 * 3600;
+  const deg = Math.floor(totalSec / 3600);
+  const remSec = totalSec % 3600;
+  const min = Math.floor(remSec / 60);
+  const sec = remSec % 60;
   return { deg, min, sec };
 }
 
