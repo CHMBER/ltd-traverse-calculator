@@ -583,7 +583,7 @@ function renderTraverse() {
           <input id="in-bearing" class="bearing-input" type="text" inputmode="decimal" placeholder="e.g. 125.3045" autocomplete="off">
           <div id="bearing-preview" class="bearing-preview pending"></div>
           <label class="f" style="margin-top:8px;">Distance (m)</label>
-          <input id="in-dist" class="dist-input-lg" type="number" inputmode="decimal" placeholder="0.000" step="0.001">
+          <input id="in-dist" class="dist-input-lg" type="number" inputmode="decimal" enterkeyhint="done" placeholder="0.000" step="0.001">
         </div>
         <div class="compass-wrap-side">${compassSvg()}</div>
       </div>
@@ -1174,6 +1174,19 @@ function render() {
       bearingEl.addEventListener('input', onBearingInput);
       updateCompassNeedle();
     }
+    const distEl = document.getElementById('in-dist');
+    if (distEl) {
+      distEl.addEventListener('keydown', onLegEntryKeydown);
+    }
+  }
+}
+
+// Lets the mobile number pad's Enter/Go/Done key submit the leg directly from the
+// Distance field, instead of requiring a reach over to the Add/Update Leg button.
+function onLegEntryKeydown(e) {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    saveLeg();
   }
 }
 

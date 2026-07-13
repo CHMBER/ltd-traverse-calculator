@@ -59,6 +59,12 @@ update the live site.
   it visually matches the bearing field instead of looking like a smaller, secondary
   input — they're equally primary. `.leg-entry-row` carries a 10px margin-bottom so
   there's a visible gap before the Add/Update Leg button.
+- Pressing Enter (the mobile number pad's Enter/Go/Done key, via `enterkeyhint="done"`
+  on `#in-dist`, or a physical Enter key) while focused in the Distance field calls
+  `saveLeg()` directly (`onLegEntryKeydown()`, attached alongside the bearing input's
+  listener in `render()`'s post-render hookup) — lets you finish a leg without reaching
+  for the Add/Update Leg button. Works for both add and update since `saveLeg()` already
+  branches on `state.editingLegId` regardless of how it's invoked.
 - Live compass needle SVG (`compassSvg()`, rendered small at 76×76 — the internal
   viewBox stays `0 0 120 120` so `updateCompassNeedle()`'s coordinate math doesn't need
   to change, only the rendered size shrinks) sits beside the bearing/distance fields in
