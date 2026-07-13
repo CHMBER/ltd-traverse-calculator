@@ -9,6 +9,11 @@ fast iteration and trivial deployment (just open the file / host it anywhere). K
 constraint in mind — don't introduce a build step or external packages without discussing
 it first, since the deployment model (copy one file to a phone) depends on it.
 
+Live at https://chmber.github.io/ltd-traverse-calculator/ via GitHub Pages (public repo
+`CHMBER/ltd-traverse-calculator`, deploys from `main` root on every push — no CI config,
+Pages serves `index.html` directly since there's no build step). Push to `main` to
+update the live site.
+
 ## Tech / conventions
 
 - Vanilla JS, no framework. Global `state` object + `render()` re-renders the active tab's

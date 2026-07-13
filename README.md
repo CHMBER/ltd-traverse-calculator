@@ -5,11 +5,14 @@ plotting, Calculator tools) built for offline use on Samsung Android work phones
 
 ## Running it
 
-No build step. Just open `index.html` in a browser, or on a phone:
+Live at **https://chmber.github.io/ltd-traverse-calculator/** (GitHub Pages, deploys
+automatically from `main` — just push to update it). Open that URL on any phone and:
 
-1. Host the folder somewhere reachable (or just open the file directly in Chrome).
-2. In Chrome, tap ⋮ → **Add to Home Screen**.
-3. It runs full-screen like an installed app, no internet required.
+- **Android (Chrome)**: tap ⋮ → **Add to Home Screen**.
+- **iPhone (Safari)**: tap Share → **Add to Home Screen**.
+
+It then runs full-screen like an installed app. No build step either way — `index.html`
+can also just be opened directly in a browser without any hosting at all.
 
 ## Project status
 
