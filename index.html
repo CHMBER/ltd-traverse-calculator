@@ -554,7 +554,7 @@ function renderTraverse() {
     <tr class="${leg.id === editing ? 'editing-row' : ''}">
       <td class="leg-name">L${i+1}</td>
       <td>${fmtLegBearing(leg)}</td>
-      <td>${fmt(Number(leg.dist)||0,2)}</td>
+      <td>${fmt(Number(leg.dist)||0,3)}</td>
       <td>
         <div class="row-actions">
           <button class="btn-icon-ghost" onclick="editLeg(${leg.id})" title="Edit">✎</button>
@@ -755,7 +755,7 @@ function renderClosure() {
   const area = computeArea();
 
   const rawRows = vecs.map((v,i)=>`
-    <tr><td class="leg-name">L${i+1}</td><td>${fmt(v.dist,2)}</td><td>${fmt(v.dep,3)}</td><td>${fmt(v.lat,3)}</td></tr>
+    <tr><td class="leg-name">L${i+1}</td><td>${fmt(v.dist,3)}</td><td>${fmt(v.dep,3)}</td><td>${fmt(v.lat,3)}</td></tr>
   `).join('');
 
   const compareRows = adj.map((v,i)=>`
@@ -774,7 +774,7 @@ function renderClosure() {
       <div class="stat-grid">
         <div class="stat"><div class="stat-label">Linear Misclose</div><div class="stat-val ${linearError<0.05?'good':'accent'}">${fmt(linearError,4)} m</div></div>
         <div class="stat"><div class="stat-label">Misclose Bearing</div><div class="stat-val accent">${fmtBearing(miscloseBearing)}</div></div>
-        <div class="stat"><div class="stat-label">Perimeter</div><div class="stat-val">${fmt(perimeter,2)} m</div></div>
+        <div class="stat"><div class="stat-label">Perimeter</div><div class="stat-val">${fmt(perimeter,3)} m</div></div>
         <div class="stat"><div class="stat-label">Precision Ratio</div><div class="stat-val accent">1 : ${Number.isFinite(precisionDenom) ? Math.round(precisionDenom).toLocaleString() : '∞'}</div></div>
       </div>
       <div class="small-note">Misclose bearing is the direction from the start point to the computed end point — the closing-error vector. If it lines up with (or opposite to) one leg's bearing, that leg is the more likely place to check for a blunder.</div>
@@ -790,7 +790,7 @@ function renderClosure() {
       <table>
         <thead><tr><th>Leg</th><th>Dist</th><th>ΔEasting</th><th>ΔNorthing</th></tr></thead>
         <tbody>${rawRows}</tbody>
-        <tfoot><tr style="font-weight:700;"><td>Σ</td><td>${fmt(perimeter,2)}</td><td>${fmt(sumDep,3)}</td><td>${fmt(sumLat,3)}</td></tr></tfoot>
+        <tfoot><tr style="font-weight:700;"><td>Σ</td><td>${fmt(perimeter,3)}</td><td>${fmt(sumDep,3)}</td><td>${fmt(sumLat,3)}</td></tr></tfoot>
       </table>
     </div>
 
