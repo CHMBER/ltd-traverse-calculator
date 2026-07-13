@@ -118,6 +118,7 @@
   }
   .bearing-input { font-size: 20px; text-align: center; letter-spacing: 0.03em; padding: 12px 8px; }
   .bearing-input-sm { font-size: 15px; }
+  .dist-input-lg { font-size: 20px; padding: 12px 8px; }
   .bearing-preview {
     text-align: center; font-family: 'JetBrains Mono', monospace; font-size: 15px;
     color: var(--accent-2); font-weight: 700; min-height: 20px; margin-top: 6px; letter-spacing: 0.02em;
@@ -163,7 +164,7 @@
   .method-toggle-grid button.active { background: rgba(255,194,32,0.12); color: var(--accent); border-color: var(--accent); }
 
   /* ---- Compass dial ---- */
-  .leg-entry-row { display: flex; gap: 12px; align-items: flex-start; }
+  .leg-entry-row { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 10px; }
   .leg-entry-fields { flex: 1; min-width: 0; }
   .compass-wrap-side { flex-shrink: 0; display: flex; justify-content: center; padding-top: 22px; }
 
@@ -580,9 +581,9 @@ function renderTraverse() {
         <div class="leg-entry-fields">
           <label class="f">Bearing / Azimuth — DDD.MMSS</label>
           <input id="in-bearing" class="bearing-input" type="text" inputmode="decimal" placeholder="e.g. 125.3045" autocomplete="off">
-          <div id="bearing-preview" class="bearing-preview pending">Type degrees.minutesseconds</div>
+          <div id="bearing-preview" class="bearing-preview pending"></div>
           <label class="f" style="margin-top:8px;">Distance (m)</label>
-          <input id="in-dist" type="number" inputmode="decimal" placeholder="0.000" step="0.001">
+          <input id="in-dist" class="dist-input-lg" type="number" inputmode="decimal" placeholder="0.000" step="0.001">
         </div>
         <div class="compass-wrap-side">${compassSvg()}</div>
       </div>
@@ -662,7 +663,7 @@ function updateCompassNeedle() {
       preview.textContent = `${String(parsed.deg).padStart(3,'0')}°${String(parsed.min).padStart(2,'0')}'${String(parsed.sec).padStart(2,'0')}"`;
       preview.classList.toggle('pending', !isBearingComplete(raw));
     } else {
-      preview.textContent = 'Type degrees.minutesseconds';
+      preview.textContent = '';
       preview.classList.add('pending');
     }
   }
@@ -912,18 +913,23 @@ function renderCalculator() {
 function setCalcMode(m) { state.calcMode = m; render(); }
 
 function renderInverse() {
+  const pointOptions = traversePointOptions();
   return `
+    <div class="panel-title panel-title-sm">Point 1</div>
+    ${pointPickerHtml('mi-p1-point', 'mi-n1', 'mi-e1', pointOptions)}
     <div class="row">
       <div><label class="f">N1</label><input id="mi-n1" type="number" inputmode="decimal" placeholder="Northing"></div>
       <div><label class="f">E1</label><input id="mi-e1" type="number" inputmode="decimal" placeholder="Easting"></div>
     </div>
+    <div class="panel-title panel-title-sm" style="margin-top:10px;">Point 2</div>
+    ${pointPickerHtml('mi-p2-point', 'mi-n2', 'mi-e2', pointOptions)}
     <div class="row">
       <div><label class="f">N2</label><input id="mi-n2" type="number" inputmode="decimal" placeholder="Northing"></div>
       <div><label class="f">E2</label><input id="mi-e2" type="number" inputmode="decimal" placeholder="Easting"></div>
     </div>
-    <button class="btn-primary" onclick="computeInverse()">CALCULATE</button>
+    <button class="btn-primary" onclick="computeInverse()" style="margin-top:10px;">CALCULATE</button>
     <div id="inverse-result"></div>
-    <div class="small-note">Computes the bearing and distance between two known coordinates (point-to-point inverse).</div>
+    <div class="small-note">Computes the bearing and distance between two known coordinates (point-to-point inverse). Points can be typed manually or picked from the traverse's own computed coordinates.</div>
   `;
 }
 function computeInverse() {
@@ -1055,31 +1061,53 @@ function computeCompare() {
 
 // Options for the baseline point-picker <select>s — lets a baseline endpoint be
 // pulled straight from the traverse's own computed coordinates instead of retyped.
-function offsetPointOptions() {
+// Traverse point picker, shared by any Calculator tool that wants to fill an N/E pair
+// from the traverse's own computed coordinates instead of retyping them (Inverse,
+// Offset). onPointSelect() takes explicit target field IDs rather than a naming
+// convention so it drops into any panel unchanged.
+function traversePointOptions() {
   return computeCoordinates()
     .map((p,i) => `<option value="${i}">${p.label} — N ${fmt(p.n,2)}, E ${fmt(p.e,2)}</option>`)
     .join('');
 }
 
-function renderOffset() {
-  const pointOptions = offsetPointOptions();
+function pointPickerHtml(selectId, nFieldId, eFieldId, pointOptions) {
   return `
-    <div class="panel-title panel-title-sm">Baseline Start (A)</div>
     <label class="f">Traverse Point</label>
-    <select id="off-a-point" onchange="onOffsetPointSelect('a', this)" style="margin-bottom:8px;">
+    <select id="${selectId}" onchange="onPointSelect(this, '${nFieldId}', '${eFieldId}')" style="margin-bottom:8px;">
       <option value="custom" selected>Custom (type N/E)</option>
       ${pointOptions}
     </select>
+  `;
+}
+
+function onPointSelect(selectEl, nFieldId, eFieldId) {
+  const nEl = document.getElementById(nFieldId);
+  const eEl = document.getElementById(eFieldId);
+  if (selectEl.value === 'custom') {
+    nEl.readOnly = false;
+    eEl.readOnly = false;
+  } else {
+    const pt = computeCoordinates()[Number(selectEl.value)];
+    if (!pt) return;
+    nEl.value = pt.n.toFixed(3);
+    eEl.value = pt.e.toFixed(3);
+    nEl.readOnly = true;
+    eEl.readOnly = true;
+  }
+}
+
+function renderOffset() {
+  const pointOptions = traversePointOptions();
+  return `
+    <div class="panel-title panel-title-sm">Baseline Start (A)</div>
+    ${pointPickerHtml('off-a-point', 'off-an', 'off-ae', pointOptions)}
     <div class="row">
       <div><label class="f">Northing</label><input id="off-an" type="number" inputmode="decimal" placeholder="Northing"></div>
       <div><label class="f">Easting</label><input id="off-ae" type="number" inputmode="decimal" placeholder="Easting"></div>
     </div>
     <div class="panel-title panel-title-sm" style="margin-top:10px;">Baseline End (B)</div>
-    <label class="f">Traverse Point</label>
-    <select id="off-b-point" onchange="onOffsetPointSelect('b', this)" style="margin-bottom:8px;">
-      <option value="custom" selected>Custom (type N/E)</option>
-      ${pointOptions}
-    </select>
+    ${pointPickerHtml('off-b-point', 'off-bn', 'off-be', pointOptions)}
     <div class="row">
       <div><label class="f">Northing</label><input id="off-bn" type="number" inputmode="decimal" placeholder="Northing"></div>
       <div><label class="f">Easting</label><input id="off-be" type="number" inputmode="decimal" placeholder="Easting"></div>
@@ -1098,22 +1126,6 @@ function renderOffset() {
     <div id="offset-result"></div>
     <div class="small-note">Computes the coordinates of a target point set out a given chainage along baseline A→B, offset left or right of it. Baseline points can be typed manually or picked from the traverse's own computed coordinates.</div>
   `;
-}
-
-function onOffsetPointSelect(which, selectEl) {
-  const nEl = document.getElementById(`off-${which}n`);
-  const eEl = document.getElementById(`off-${which}e`);
-  if (selectEl.value === 'custom') {
-    nEl.readOnly = false;
-    eEl.readOnly = false;
-  } else {
-    const pt = computeCoordinates()[Number(selectEl.value)];
-    if (!pt) return;
-    nEl.value = pt.n.toFixed(3);
-    eEl.value = pt.e.toFixed(3);
-    nEl.readOnly = true;
-    eEl.readOnly = true;
-  }
 }
 
 function computeOffset() {

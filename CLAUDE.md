@@ -51,6 +51,14 @@ update the live site.
   back into the entry form (pencil icon), highlights the row being edited, Update/Cancel
   buttons.
 - Bearing input auto-advances focus to the Distance field once 4 fractional digits are typed.
+  The live bearing-preview line below it is blank until you start typing (no "Type
+  degrees.minutesseconds" placeholder — that was judged unnecessary clutter) — this only
+  applies to `#bearing-preview` specifically; the shared `bearingPreviewText()` helper
+  used by Radiation/Compare still returns that hint text for their previews, unchanged.
+- Distance input uses `.dist-input-lg` (20px font, same padding as `.bearing-input`) so
+  it visually matches the bearing field instead of looking like a smaller, secondary
+  input — they're equally primary. `.leg-entry-row` carries a 10px margin-bottom so
+  there's a visible gap before the Add/Update Leg button.
 - Live compass needle SVG (`compassSvg()`, rendered small at 76×76 — the internal
   viewBox stays `0 0 120 120` so `updateCompassNeedle()`'s coordinate math doesn't need
   to change, only the rendered size shrinks) sits beside the bearing/distance fields in
@@ -122,19 +130,27 @@ full-width button below it for the most recently added tool:
    `computeOffset()` — the target is A plus `chainage` along the baseline's unit
    vector plus the signed offset along its right-perpendicular unit vector
    `(-dE/L, dN/L)` (derived from, and consistent with, the sign convention verified
-   during development: facing baseline azimuth θ, "right" is azimuth θ+90°). Each
-   baseline endpoint (A and B) has a `<select>` (`off-a-point`/`off-b-point`,
-   populated by `offsetPointOptions()` from `computeCoordinates()`) letting you pick
-   an existing traverse point instead of retyping its N/E — picking a point fills
-   and read-only-locks the N/E inputs (`onOffsetPointSelect()`); "Custom" unlocks them
-   for manual entry. This was originally the reverse calc (P → chainage/offset); it
-   was changed to this stakeout direction and the old mode was dropped, not kept as
-   a toggle, since that's what was asked for — reintroduce it as a toggle if the
-   locate-a-point-on-a-baseline direction turns out to be needed too.
+   during development: facing baseline azimuth θ, "right" is azimuth θ+90°). This was
+   originally the reverse calc (P → chainage/offset); it was changed to this stakeout
+   direction and the old mode was dropped, not kept as a toggle, since that's what was
+   asked for — reintroduce it as a toggle if the locate-a-point-on-a-baseline direction
+   turns out to be needed too.
    Internal identifiers still say `calcMode`/`renderCalculator`/`setCalcMode` (renamed
    from the old `missingMode`/`renderMissing`/`setMissingMode` together with the UI
    label) — keep code and UI names in sync here, unlike the intentional lat/dep vs
    Northing/Easting split elsewhere in this file.
+
+**Traverse point picker** — Inverse and Offset both let any N/E field be filled from
+the traverse's own computed coordinates instead of retyped, via a shared trio just
+above `renderOffset()`: `traversePointOptions()` (builds the `<option>` list from
+`computeCoordinates()`), `pointPickerHtml(selectId, nFieldId, eFieldId, pointOptions)`
+(renders the `<select>`, wired to call `onPointSelect` with those exact field IDs —
+this is why it drops into any panel unchanged, no ID-naming convention required), and
+`onPointSelect(selectEl, nFieldId, eFieldId)` (fills + read-only-locks the two fields,
+or unlocks them again on "Custom"). If you add a point picker to another calculator,
+reuse this trio rather than duplicating it — it was originally Offset-only
+(`offsetPointOptions()`/`onOffsetPointSelect()`) and got generalized here specifically
+so Inverse could reuse it.
 
 ## Known limitations / likely next steps
 
