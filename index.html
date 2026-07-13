@@ -105,8 +105,6 @@
   .row { display: flex; gap: 8px; margin-bottom: 8px; align-items: flex-start; }
   .row > * { flex: 1; }
   label.f { font-size: 10.5px; color: var(--text-secondary); display: block; margin-bottom: 4px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
-  .checkbox-row { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-data); }
-  .checkbox-row input[type="checkbox"] { width: auto; }
   input, select {
     width: 100%; background: var(--input-bg); border: 1px solid var(--input-border); color: var(--text-primary);
     padding: 10px 8px; border-radius: 8px; font-size: 15px; font-family: 'JetBrains Mono', monospace;
@@ -165,7 +163,9 @@
   .method-toggle-grid button.active { background: rgba(255,194,32,0.12); color: var(--accent); border-color: var(--accent); }
 
   /* ---- Compass dial ---- */
-  .compass-wrap { display: flex; justify-content: center; padding: 8px 0 4px; }
+  .leg-entry-row { display: flex; gap: 12px; align-items: flex-start; }
+  .leg-entry-fields { flex: 1; min-width: 0; }
+  .compass-wrap-side { flex-shrink: 0; display: flex; justify-content: center; padding-top: 22px; }
 
   /* ---- Plot ---- */
   .plot-wrap { background: var(--input-bg); border: 1px solid var(--input-border); border-radius: 10px; overflow: hidden; }
@@ -241,11 +241,7 @@ const state = {
   startN: 1000.000,
   startE: 1000.000,
   calcMode: 'inverse',
-  editingLegId: null,
-  backsight: {
-    startEnabled: false, startKnown: '', startObserved: '',
-    finishEnabled: false, finishKnown: '', finishObserved: ''
-  }
+  editingLegId: null
 };
 let legIdCounter = 1;
 
@@ -264,7 +260,6 @@ function saveState() {
       method: state.method,
       startN: state.startN,
       startE: state.startE,
-      backsight: state.backsight,
       legIdCounter
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
@@ -294,7 +289,6 @@ function loadState() {
     if (data.method === 'compass' || data.method === 'leastSquares') state.method = data.method;
     if (typeof data.startN === 'number') state.startN = data.startN;
     if (typeof data.startE === 'number') state.startE = data.startE;
-    if (data.backsight) state.backsight = { ...state.backsight, ...data.backsight };
     if (typeof data.legIdCounter === 'number') legIdCounter = data.legIdCounter;
   } catch (e) { /* corrupt/unavailable storage — start fresh */ }
 }
@@ -306,7 +300,6 @@ function resetJob() {
   state.startN = 1000.000;
   state.startE = 1000.000;
   state.editingLegId = null;
-  state.backsight = { startEnabled: false, startKnown: '', startObserved: '', finishEnabled: false, finishKnown: '', finishObserved: '' };
   legIdCounter = 1;
   saveState();
   render();
@@ -529,50 +522,6 @@ function renderHeader() {
   }
 }
 
-/* =========================================================
-   RENDER: BACKSIGHT ORIENTATION CHECK (optional, in Traverse tab)
-========================================================= */
-function renderBacksightPanel() {
-  const bs = state.backsight;
-  return `
-    <div class="panel">
-      <div class="panel-title">Backsight Orientation Check (optional)</div>
-      <label class="checkbox-row" style="margin-bottom:${bs.startEnabled?'10px':'0'};">
-        <input type="checkbox" id="bs-start-toggle" ${bs.startEnabled?'checked':''} onchange="toggleBacksight('start', this.checked)">
-        Starting backsight
-      </label>
-      ${bs.startEnabled ? renderBacksightFields('start') : ''}
-      <div class="divider"></div>
-      <label class="checkbox-row" style="margin-bottom:${bs.finishEnabled?'10px':'0'};">
-        <input type="checkbox" id="bs-finish-toggle" ${bs.finishEnabled?'checked':''} onchange="toggleBacksight('finish', this.checked)">
-        Finishing backsight
-      </label>
-      ${bs.finishEnabled ? renderBacksightFields('finish') : ''}
-      <div class="small-note">Enter the known control bearing to a backsight point, and what was actually observed to that same point. The difference is a genuine, independent orientation check — unlike the traverse bearings themselves, this can catch a real angular error.</div>
-    </div>
-  `;
-}
-
-function renderBacksightFields(which) {
-  const bs = state.backsight;
-  const known = bs[which+'Known'], observed = bs[which+'Observed'];
-  return `
-    <div class="row">
-      <div>
-        <label class="f">Known Bearing (DDD.MMSS)</label>
-        <input id="bs-${which}-known" class="bearing-input bearing-input-sm" type="text" inputmode="decimal" placeholder="e.g. 45.3000" value="${known||''}" oninput="onBacksightInput('${which}','known', this)">
-        <div id="bs-${which}-known-preview" class="bearing-preview pending preview-sm">${bearingPreviewText(known)}</div>
-      </div>
-      <div>
-        <label class="f">Observed Bearing (DDD.MMSS)</label>
-        <input id="bs-${which}-observed" class="bearing-input bearing-input-sm" type="text" inputmode="decimal" placeholder="e.g. 45.3020" value="${observed||''}" oninput="onBacksightInput('${which}','observed', this)">
-        <div id="bs-${which}-observed-preview" class="bearing-preview pending preview-sm">${bearingPreviewText(observed)}</div>
-      </div>
-    </div>
-    <div id="bs-${which}-result">${renderBacksightResult(which)}</div>
-  `;
-}
-
 function bearingPreviewText(raw) {
   const parsed = parseDDDMMSS(raw);
   if (!raw || !parsed) return 'Type degrees.minutesseconds';
@@ -587,46 +536,6 @@ function fmtSignedBearing(decDeg) {
   const min = Math.floor(minFull);
   const sec = Math.round((minFull-min)*60);
   return `${sign}${deg}°${String(min).padStart(2,'0')}'${String(sec).padStart(2,'0')}"`;
-}
-
-function renderBacksightResult(which) {
-  const bs = state.backsight;
-  const known = parseDDDMMSS(bs[which+'Known']);
-  const observed = parseDDDMMSS(bs[which+'Observed']);
-  if (!known || !observed || !isBearingComplete(bs[which+'Known']) || !isBearingComplete(bs[which+'Observed'])) return '';
-  const knownDec = dmsToDecimal(known.deg, known.min, known.sec);
-  const obsDec = dmsToDecimal(observed.deg, observed.min, observed.sec);
-  let diff = obsDec - knownDec;
-  diff = ((diff + 180) % 360 + 360) % 360 - 180; // signed, -180..180
-  const label = which === 'start' ? 'Starting Orientation Check' : 'Finishing Orientation Check';
-  const good = Math.abs(diff) < (1/60); // within 1 arc-minute
-  return `
-    <div class="stat" style="margin-top:2px;">
-      <div class="stat-label">${label}</div>
-      <div class="stat-val ${good?'good':'accent'}">${fmtSignedBearing(diff)}</div>
-    </div>
-  `;
-}
-
-function toggleBacksight(which, checked) {
-  state.backsight[which + 'Enabled'] = checked;
-  saveState();
-  render();
-}
-
-function onBacksightInput(which, field, el) {
-  const cleaned = sanitizeBearingInput(el.value);
-  if (cleaned !== el.value) el.value = cleaned;
-  state.backsight[which + (field === 'known' ? 'Known' : 'Observed')] = cleaned;
-
-  const previewEl = document.getElementById(`bs-${which}-${field}-preview`);
-  if (previewEl) {
-    previewEl.textContent = bearingPreviewText(cleaned);
-    previewEl.classList.toggle('pending', !isBearingComplete(cleaned));
-  }
-  const resultEl = document.getElementById(`bs-${which}-result`);
-  if (resultEl) resultEl.innerHTML = renderBacksightResult(which);
-  saveState();
 }
 
 /* =========================================================
@@ -651,16 +560,32 @@ function renderTraverse() {
   const isEditing = editing !== null;
 
   return `
-    ${renderBacksightPanel()}
+    <div class="panel">
+      <div class="panel-title">Closing Leg (Live)</div>
+      ${(() => {
+        const closing = computeClosingLeg();
+        if (!closing) return emptyState('Add at least 2 legs to calculate the closing leg.');
+        return `
+        <div class="stat-grid">
+          <div class="stat"><div class="stat-label">Bearing</div><div class="stat-val accent">${fmtBearing(closing.bearing)}</div></div>
+          <div class="stat"><div class="stat-label">Distance</div><div class="stat-val accent">${fmt(closing.dist,3)} m</div></div>
+        </div>`;
+      })()}
+      <div class="small-note">The bearing and distance needed to return to the start point, recalculated from all legs entered so far.</div>
+    </div>
 
     <div class="panel">
       <div class="panel-title">${isEditing ? `Edit Leg` : 'Add Traverse Leg'}</div>
-      <label class="f">Bearing / Azimuth — DDD.MMSS</label>
-      <input id="in-bearing" class="bearing-input" type="text" inputmode="decimal" placeholder="e.g. 125.3045" autocomplete="off">
-      <div id="bearing-preview" class="bearing-preview pending">Type degrees.minutesseconds</div>
-      <div class="compass-wrap">${compassSvg()}</div>
-      <label class="f">Distance (m)</label>
-      <input id="in-dist" type="number" inputmode="decimal" placeholder="0.000" step="0.001" style="margin-bottom:10px;">
+      <div class="leg-entry-row">
+        <div class="leg-entry-fields">
+          <label class="f">Bearing / Azimuth — DDD.MMSS</label>
+          <input id="in-bearing" class="bearing-input" type="text" inputmode="decimal" placeholder="e.g. 125.3045" autocomplete="off">
+          <div id="bearing-preview" class="bearing-preview pending">Type degrees.minutesseconds</div>
+          <label class="f" style="margin-top:8px;">Distance (m)</label>
+          <input id="in-dist" type="number" inputmode="decimal" placeholder="0.000" step="0.001">
+        </div>
+        <div class="compass-wrap-side">${compassSvg()}</div>
+      </div>
       ${isEditing ? `
         <div class="row" style="gap:8px;">
           <button class="btn-primary" style="flex:2;" onclick="saveLeg()">✓ UPDATE LEG</button>
@@ -677,26 +602,12 @@ function renderTraverse() {
         <tbody>${rows}</tbody>
       </table>`}
     </div>
-
-    <div class="panel">
-      <div class="panel-title">Closing Leg (Live)</div>
-      ${(() => {
-        const closing = computeClosingLeg();
-        if (!closing) return emptyState('Add at least 2 legs to calculate the closing leg.');
-        return `
-        <div class="stat-grid">
-          <div class="stat"><div class="stat-label">Bearing</div><div class="stat-val accent">${fmtBearing(closing.bearing)}</div></div>
-          <div class="stat"><div class="stat-label">Distance</div><div class="stat-val accent">${fmt(closing.dist,3)} m</div></div>
-        </div>`;
-      })()}
-      <div class="small-note">The bearing and distance needed to return to the start point, recalculated from all legs entered so far.</div>
-    </div>
   `;
 }
 
 function compassSvg() {
   return `
-    <svg width="120" height="120" viewBox="0 0 120 120" id="compass-svg">
+    <svg width="76" height="76" viewBox="0 0 120 120" id="compass-svg">
       <circle cx="60" cy="60" r="54" fill="var(--compass-bg)" stroke="var(--input-border)" stroke-width="1.5"/>
       <line x1="60" y1="10" x2="60" y2="18" stroke="var(--compass-tick)" stroke-width="1.5"/>
       <line x1="60" y1="102" x2="60" y2="110" stroke="var(--compass-tick)" stroke-width="1.5"/>

@@ -19,7 +19,7 @@ update the live site.
 - Vanilla JS, no framework. Global `state` object + `render()` re-renders the active tab's
   `innerHTML` from scratch on every state change. No virtual DOM — this is intentional
   for simplicity, but means event listeners on dynamically-created inputs must be
-  re-attached after every render (see `onBearingInput`, `onBacksightInput`, etc.)
+  re-attached after every render (see `onBearingInput`, `onPlainBearingInput`, etc.)
 - Bearings are **whole-circle azimuths** (0–360°, no quadrant/N-S-E-W letters), entered
   in `DDD.MMSS` field format (e.g. `125.3045` → 125°30'45"). See `parseDDDMMSS()` and
   `isBearingComplete()`. Trailing digits are optional and pad-right with zero
@@ -44,15 +44,24 @@ update the live site.
 ## Current features (all working, tested)
 
 **Traverse tab**
-- Add/edit/delete legs (bearing `DDD.MMSS` + distance). Editing loads a leg back into the
-  entry form (pencil icon), highlights the row being edited, Update/Cancel buttons.
+- Live "Closing Leg" panel at the top: bearing + distance needed to close the loop back
+  to the start, recalculated on every render (i.e. every add/edit/delete). Deliberately
+  first on the page — it's the number a surveyor checks most often mid-job.
+- Add/edit/delete legs (bearing `DDD.MMSS` + distance) below that. Editing loads a leg
+  back into the entry form (pencil icon), highlights the row being edited, Update/Cancel
+  buttons.
 - Bearing input auto-advances focus to the Distance field once 4 fractional digits are typed.
-- Live compass needle SVG updates as you type a bearing.
-- Optional "Backsight Orientation Check" panel (collapsible, off by default): Known vs
-  Observed bearing at a Starting backsight and/or Finishing backsight. Shows the signed
-  difference as a genuine independent angular check (see note below on why this matters).
-- Live "Closing Leg" panel: bearing + distance needed to close the loop back to the start,
-  recalculated on every render (i.e. every add/edit/delete).
+- Live compass needle SVG (`compassSvg()`, rendered small at 76×76 — the internal
+  viewBox stays `0 0 120 120` so `updateCompassNeedle()`'s coordinate math doesn't need
+  to change, only the rendered size shrinks) sits beside the bearing/distance fields in
+  a `.leg-entry-row` flex layout (`.leg-entry-fields` + `.compass-wrap-side`), not below
+  them — keep both fields comfortably wide since they're the primary input, the compass
+  is a secondary visual aid.
+- There used to be an optional Backsight Orientation Check panel here (Known vs Observed
+  bearing at a control point, as an independent angular check). It was removed per
+  request — wasn't behaving as expected and wasn't needed. If a real angular check is
+  wanted again later, don't just restore the old version verbatim without checking why
+  it didn't work for the user first.
 
 **Closure tab**
 - Summary stats, in this order: Linear Misclose, Misclose Bearing, Perimeter, Precision Ratio.
@@ -63,9 +72,11 @@ update the live site.
     development, see conversation history if resurrecting this). Misclose Bearing is the
     honest substitute: it tells you the *direction* of the error so you can compare it
     against individual leg bearings to spot which leg is the likely blunder.
-  - Genuine angular error detection instead lives in the Traverse tab's Backsight check,
-    which compares an independently-known control bearing against what was actually
-    observed — that's real, this derived-from-bearings approach is not.
+  - There is currently no genuine independent angular check in the app (a Backsight
+    Orientation Check panel used to fill that role — known vs. observed bearing at a
+    control point — but was removed; see Traverse tab notes above). Misclose Bearing
+    above remains the only, derived-from-bearings-only substitute — keep that
+    distinction in mind if this ever needs revisiting.
 - ΔEasting/ΔNorthing per-leg table with a Σ sum row.
 - Traverse Adjustment: Compass (Bowditch) or Least Squares toggle (`state.method` —
   `'compass' | 'leastSquares'`; the old Transit rule was dropped entirely per request,
@@ -131,7 +142,7 @@ full-width button below it for the most recently added tool:
   (key `traverseFieldBook.v1` — kept as-is despite the app's later rename to "LTD
   Traverse Calculator", so any already-saved field job isn't silently orphaned under
   a key nothing looks for anymore) on every data-mutating action — add/edit/delete leg,
-  method toggle, start coordinate change, backsight fields — via `saveState()`, and
+  method toggle, start coordinate change — via `saveState()`, and
   restores on page load via `loadState()` (both near the top of the script, right after
   the `state` object). Tab switches and other pure-navigation renders do NOT trigger a
   save, so `saveState()` is called explicitly from each mutating function rather than
@@ -147,13 +158,10 @@ full-width button below it for the most recently added tool:
   shows a realistic "CLOSED" badge rather than an empty state) — and saves it, so the
   app is never a blank slate the very first time someone opens it. This is distinct
   from `resetJob()`, which always clears to genuinely empty. If you add more sample
-  data (e.g. to demo backsight or the Calculator tools), extend `loadSampleJob()`.
+  data (e.g. to demo the Calculator tools), extend `loadSampleJob()`.
 - **No true PWA manifest/service worker yet** — currently works via "Add to Home Screen"
   in Chrome but isn't a real installable/offline-cached PWA. Needs `manifest.json` +
   a service worker for real offline reliability.
-- The Backsight Orientation Check (Traverse tab) is currently self-contained and does NOT
-  feed into the Closure tab's stats. Wiring the finishing-backsight misclosure into the
-  Closure summary was discussed as a possible next step but not yet built.
 - Calculator tab tools are stateless scratch pads (values aren't saved to `state`,
   just read from the DOM on "Calculate" click) — fine for a quick calculator, but worth
   knowing if you're looking for where that data "lives." `state.calcMode` (which
