@@ -228,6 +228,10 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 3v18M15 3v18M3 9h18M3 15h18" stroke-dasharray="2 2"/></svg>
       CALCULATOR
     </button>
+    <button data-tab="convert">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 7h11l-3-3M17 17H6l3 3"/></svg>
+      CONVERT
+    </button>
   </nav>
 </div>
 
@@ -237,12 +241,13 @@
 ========================================================= */
 const state = {
   tab: 'traverse',
-  legs: [],          // {id, deg, min, sec, dist} — deg/min/sec is a whole-circle azimuth (0-360)
+  legs: [],          // {id, deg, min, sec, dist} — deg/min/sec is a whole-circle azimuth (0-360), dist always in metres
   method: 'compass',  // 'compass' | 'leastSquares'
   startN: 1000.000,
   startE: 1000.000,
   calcMode: 'inverse',
-  editingLegId: null
+  editingLegId: null,
+  distUnit: 'm'       // 'm' | 'ftin' | 'links' — entry unit for the Distance field only; state.legs[].dist is always metres
 };
 let legIdCounter = 1;
 
@@ -261,6 +266,7 @@ function saveState() {
       method: state.method,
       startN: state.startN,
       startE: state.startE,
+      distUnit: state.distUnit,
       legIdCounter
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
@@ -290,6 +296,7 @@ function loadState() {
     if (data.method === 'compass' || data.method === 'leastSquares') state.method = data.method;
     if (typeof data.startN === 'number') state.startN = data.startN;
     if (typeof data.startE === 'number') state.startE = data.startE;
+    if (data.distUnit === 'm' || data.distUnit === 'ftin' || data.distUnit === 'links') state.distUnit = data.distUnit;
     if (typeof data.legIdCounter === 'number') legIdCounter = data.legIdCounter;
   } catch (e) { /* corrupt/unavailable storage — start fresh */ }
 }
@@ -301,6 +308,7 @@ function resetJob() {
   state.startN = 1000.000;
   state.startE = 1000.000;
   state.editingLegId = null;
+  state.distUnit = 'm';
   legIdCounter = 1;
   saveState();
   render();
@@ -317,6 +325,12 @@ function flashSaved() {
 /* =========================================================
    SURVEY MATH
 ========================================================= */
+// Shared unit-conversion constants (exact, international definitions), used by both
+// the Traverse tab's distance-unit entry toggle and the Conversions tab.
+const FEET_TO_M = 0.3048;              // 1 international foot
+const LINK_TO_M = 0.201168;            // 1 Gunter's link = 0.66 ft
+const PERCH_TO_M2 = 25.29285264;       // 1 perch (rod) = (16.5 ft)^2
+
 function dmsToDecimal(deg, min, sec) {
   return (Number(deg)||0) + (Number(min)||0)/60 + (Number(sec)||0)/3600;
 }
@@ -545,6 +559,104 @@ function fmtSignedBearing(decDeg) {
 }
 
 /* =========================================================
+   DISTANCE UNIT ENTRY (Traverse tab's Add/Edit Leg panel)
+   state.legs[].dist is always metres — this section only changes what unit the
+   Distance field(s) accept at entry time, converting to metres before saveLeg()
+   stores it. Kept in its own #dist-section-container so switching units can
+   regenerate just this fragment (via setDistUnit) without a full render() wiping
+   out an in-progress Bearing entry.
+========================================================= */
+function renderDistSection() {
+  return `
+    <label class="f">Distance Unit</label>
+    <div class="method-toggle" style="margin-bottom:8px;">
+      <button class="${state.distUnit==='m'?'active':''}" onclick="setDistUnit('m')">METRES</button>
+      <button class="${state.distUnit==='ftin'?'active':''}" onclick="setDistUnit('ftin')">FT-IN</button>
+      <button class="${state.distUnit==='links'?'active':''}" onclick="setDistUnit('links')">LINKS</button>
+    </div>
+    ${renderDistUnitFields()}
+  `;
+}
+
+function renderDistUnitFields() {
+  if (state.distUnit === 'ftin') {
+    return `
+      <div class="row">
+        <div><label class="f">Feet</label><input id="in-dist-ft" class="dist-input-lg" type="number" inputmode="decimal" placeholder="0" step="1"></div>
+        <div><label class="f">Inches</label><input id="in-dist-in" class="dist-input-lg" type="number" inputmode="decimal" enterkeyhint="done" placeholder="0.00" step="0.01"></div>
+      </div>
+    `;
+  } else if (state.distUnit === 'links') {
+    return `
+      <label class="f">Distance (links)</label>
+      <input id="in-dist-links" class="dist-input-lg" type="number" inputmode="decimal" enterkeyhint="done" placeholder="0.000" step="0.001">
+    `;
+  }
+  return `
+    <label class="f">Distance (m)</label>
+    <input id="in-dist" class="dist-input-lg" type="number" inputmode="decimal" enterkeyhint="done" placeholder="0.000" step="0.001">
+  `;
+}
+
+// Reads whatever the currently-selected unit's field(s) hold and converts to metres.
+// Returns null if the resulting distance isn't a usable positive value.
+function readDistInputAsMeters() {
+  let metres;
+  if (state.distUnit === 'ftin') {
+    const ft = Number(document.getElementById('in-dist-ft').value) || 0;
+    const inch = Number(document.getElementById('in-dist-in').value) || 0;
+    metres = (ft + inch/12) * FEET_TO_M;
+  } else if (state.distUnit === 'links') {
+    const links = Number(document.getElementById('in-dist-links').value) || 0;
+    metres = links * LINK_TO_M;
+  } else {
+    metres = Number(document.getElementById('in-dist').value) || 0;
+  }
+  return metres > 0 ? metres : null;
+}
+
+// Populates the currently-selected unit's field(s) from a metres value — used when
+// loading an existing leg into the edit form.
+function setDistInputsFromMeters(metres) {
+  if (state.distUnit === 'ftin') {
+    const totalFt = metres / FEET_TO_M;
+    const ft = Math.floor(totalFt);
+    const inch = (totalFt - ft) * 12;
+    const ftEl = document.getElementById('in-dist-ft');
+    const inEl = document.getElementById('in-dist-in');
+    if (ftEl) ftEl.value = ft;
+    if (inEl) inEl.value = inch.toFixed(2);
+  } else if (state.distUnit === 'links') {
+    const el = document.getElementById('in-dist-links');
+    if (el) el.value = (metres / LINK_TO_M).toFixed(3);
+  } else {
+    const el = document.getElementById('in-dist');
+    if (el) el.value = metres.toFixed(3);
+  }
+}
+
+// Enter/Go/Done on whichever field is last in the current unit's entry order submits
+// the leg, same as the plain-metres field already did.
+function attachDistFieldListeners() {
+  const id = state.distUnit === 'ftin' ? 'in-dist-in' : state.distUnit === 'links' ? 'in-dist-links' : 'in-dist';
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('keydown', onLegEntryKeydown);
+}
+
+function setDistUnit(unit) {
+  state.distUnit = unit;
+  saveState();
+  const container = document.getElementById('dist-section-container');
+  if (!container) return;
+  container.innerHTML = renderDistSection();
+  attachDistFieldListeners();
+  if (state.editingLegId !== null) {
+    const leg = state.legs.find(l => l.id === state.editingLegId);
+    if (leg) setDistInputsFromMeters(Number(leg.dist)||0);
+  }
+}
+
+/* =========================================================
    RENDER: TRAVERSE TAB
 ========================================================= */
 function renderTraverse() {
@@ -587,8 +699,7 @@ function renderTraverse() {
           <label class="f">Bearing / Azimuth — DDD.MMSS</label>
           <input id="in-bearing" class="bearing-input" type="text" inputmode="decimal" placeholder="e.g. 125.3045" autocomplete="off">
           <div id="bearing-preview" class="bearing-preview pending"></div>
-          <label class="f" style="margin-top:8px;">Distance (m)</label>
-          <input id="in-dist" class="dist-input-lg" type="number" inputmode="decimal" enterkeyhint="done" placeholder="0.000" step="0.001">
+          <div id="dist-section-container" style="margin-top:8px;">${renderDistSection()}</div>
         </div>
         <div class="compass-wrap-side">${compassSvg()}</div>
       </div>
@@ -694,8 +805,8 @@ function saveLeg() {
   const raw = bearingEl.value;
   const parsed = parseDDDMMSS(raw);
   if (!raw || !parsed) { flash('Enter a bearing in DDD.MMSS format'); return; }
-  const dist = document.getElementById('in-dist').value;
-  if (!dist || Number(dist) <= 0) { flash('Enter a distance greater than 0'); return; }
+  const dist = readDistInputAsMeters();
+  if (dist === null) { flash('Enter a distance greater than 0'); return; }
 
   if (state.editingLegId !== null) {
     const leg = state.legs.find(l => l.id === state.editingLegId);
@@ -720,12 +831,11 @@ function editLeg(id) {
   render();
   requestAnimationFrame(() => {
     const bearingEl = document.getElementById('in-bearing');
-    const distEl = document.getElementById('in-dist');
     if (bearingEl) {
       bearingEl.value = `${leg.deg}.${String(leg.min).padStart(2,'0')}${String(leg.sec).padStart(2,'0')}`;
       updateCompassNeedle();
     }
-    if (distEl) distEl.value = leg.dist;
+    setDistInputsFromMeters(Number(leg.dist)||0);
     if (bearingEl) { bearingEl.focus(); bearingEl.select(); }
     document.getElementById('main').scrollTop = 0;
   });
@@ -1159,6 +1269,79 @@ function computeOffset() {
 }
 
 /* =========================================================
+   RENDER: CONVERT TAB
+   Standalone unit converters — imperial/chain-survey units to metric. Same
+   FEET_TO_M / LINK_TO_M / PERCH_TO_M2 constants as the Traverse tab's distance-unit
+   entry toggle, kept in one place near the top of SURVEY MATH.
+========================================================= */
+function renderConvert() {
+  return `
+    <div class="panel">
+      <div class="panel-title">Feet &amp; Inches → Metres</div>
+      <div class="row">
+        <div><label class="f">Feet</label><input id="cv-fi-ft" type="number" inputmode="decimal" placeholder="0" step="1"></div>
+        <div><label class="f">Inches</label><input id="cv-fi-in" type="number" inputmode="decimal" placeholder="0.00" step="0.01"></div>
+      </div>
+      <button class="btn-primary" onclick="computeFeetInchesConvert()">CONVERT</button>
+      <div id="cv-fi-result"></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">Links → Metres</div>
+      <label class="f">Links</label>
+      <input id="cv-links" type="number" inputmode="decimal" placeholder="0.000" step="0.001" style="margin-bottom:10px;">
+      <button class="btn-primary" onclick="computeLinksConvert()">CONVERT</button>
+      <div id="cv-links-result"></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">Acres, Roods &amp; Perches → m²</div>
+      <div class="row">
+        <div><label class="f">Acres</label><input id="cv-acres" type="number" inputmode="decimal" placeholder="0" step="1"></div>
+        <div><label class="f">Roods</label><input id="cv-roods" type="number" inputmode="decimal" placeholder="0" step="1"></div>
+        <div><label class="f">Perches</label><input id="cv-perches" type="number" inputmode="decimal" placeholder="0.00" step="0.01"></div>
+      </div>
+      <button class="btn-primary" onclick="computeAreaConvert()">CONVERT</button>
+      <div id="cv-area-result"></div>
+    </div>
+  `;
+}
+
+function computeFeetInchesConvert() {
+  const ft = Number(document.getElementById('cv-fi-ft').value) || 0;
+  const inch = Number(document.getElementById('cv-fi-in').value) || 0;
+  const metres = (ft + inch/12) * FEET_TO_M;
+  document.getElementById('cv-fi-result').innerHTML = `
+    <div class="divider"></div>
+    <div class="stat"><div class="stat-label">Metres</div><div class="stat-val accent">${fmt(metres,3)}</div></div>
+  `;
+}
+
+function computeLinksConvert() {
+  const links = Number(document.getElementById('cv-links').value) || 0;
+  const metres = links * LINK_TO_M;
+  document.getElementById('cv-links-result').innerHTML = `
+    <div class="divider"></div>
+    <div class="stat"><div class="stat-label">Metres</div><div class="stat-val accent">${fmt(metres,3)}</div></div>
+  `;
+}
+
+function computeAreaConvert() {
+  const acres = Number(document.getElementById('cv-acres').value) || 0;
+  const roods = Number(document.getElementById('cv-roods').value) || 0;
+  const perches = Number(document.getElementById('cv-perches').value) || 0;
+  const totalPerches = acres*160 + roods*40 + perches;
+  const areaM2 = totalPerches * PERCH_TO_M2;
+  document.getElementById('cv-area-result').innerHTML = `
+    <div class="divider"></div>
+    <div class="stat-grid">
+      <div class="stat"><div class="stat-label">Area (m²)</div><div class="stat-val accent">${fmt(areaM2,2)}</div></div>
+      <div class="stat"><div class="stat-label">Area (ha)</div><div class="stat-val accent">${fmt(areaM2/10000,4)}</div></div>
+    </div>
+  `;
+}
+
+/* =========================================================
    MAIN RENDER / NAV
 ========================================================= */
 function render() {
@@ -1168,6 +1351,7 @@ function render() {
   else if (state.tab === 'closure') main.innerHTML = renderClosure();
   else if (state.tab === 'coords') main.innerHTML = renderCoords();
   else if (state.tab === 'calculator') main.innerHTML = renderCalculator();
+  else if (state.tab === 'convert') main.innerHTML = renderConvert();
 
   document.querySelectorAll('nav button').forEach(b => {
     b.classList.toggle('active', b.dataset.tab === state.tab);
@@ -1179,10 +1363,7 @@ function render() {
       bearingEl.addEventListener('input', onBearingInput);
       updateCompassNeedle();
     }
-    const distEl = document.getElementById('in-dist');
-    if (distEl) {
-      distEl.addEventListener('keydown', onLegEntryKeydown);
-    }
+    attachDistFieldListeners();
   }
 }
 

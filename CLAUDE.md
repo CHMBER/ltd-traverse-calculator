@@ -90,6 +90,22 @@ update the live site.
   request — wasn't behaving as expected and wasn't needed. If a real angular check is
   wanted again later, don't just restore the old version verbatim without checking why
   it didn't work for the user first.
+- **Distance entry unit toggle** (`state.distUnit` — `'m' | 'ftin' | 'links'`, persisted):
+  a `.method-toggle` above the Distance field lets you enter a leg's distance in
+  Metres, Feet & Inches (two separate fields — no compound-decimal encoding, avoids
+  the ambiguity a single "12.6" field would have), or Links. **`state.legs[].dist` is
+  always metres** — the selected unit only changes what the entry field(s) accept;
+  `saveLeg()` converts via `readDistInputAsMeters()` before storing, so every other
+  calculation and display in the app (closure, adjustment, area, tables) is completely
+  unaffected and stays in metres. `editLeg()` uses `setDistInputsFromMeters()` to
+  populate the field(s) in whichever unit is *currently* selected, converting back from
+  the stored metres value. The toggle+field(s) live in their own
+  `#dist-section-container` fragment (`renderDistSection()`), regenerated in place by
+  `setDistUnit()` rather than through a full `render()` — this specifically avoids
+  wiping out an in-progress Bearing entry, which a full re-render would do since the
+  Bearing field isn't bound to `state` (see the no-virtual-DOM note above). Conversion
+  constants (`FEET_TO_M`, `LINK_TO_M`, `PERCH_TO_M2`) live once near the top of SURVEY
+  MATH and are shared with the Convert tab below.
 
 **Closure tab**
 - Summary stats, in this order: Linear Misclose, Misclose Bearing, Perimeter, Precision Ratio.
@@ -172,13 +188,27 @@ reuse this trio rather than duplicating it — it was originally Offset-only
 (`offsetPointOptions()`/`onOffsetPointSelect()`) and got generalized here specifically
 so Inverse could reuse it.
 
+**Convert tab** — standalone one-way unit converters (imperial/chain-survey → metric
+only, no reverse direction, since that's what was asked for), stateless scratch pads
+like the Calculator tab's tools, three always-visible panels rather than a mode toggle
+since each is small:
+1. Feet & Inches → Metres.
+2. Links → Metres.
+3. Acres, Roods & Perches → m² and hectares (compound entry — all three fields
+   combine, matching how imperial land area is traditionally expressed together, e.g.
+   "2 acres, 1 rood, 15 perches" — not three separate converters).
+Uses the same `FEET_TO_M`/`LINK_TO_M`/`PERCH_TO_M2` constants as the Traverse tab's
+distance-unit toggle (see above) — `PERCH_TO_M2` = `(16.5 ft)²` exactly, 1 rood = 40
+perches, 1 acre = 4 roods = 160 perches. All verified against the standard exact
+international values (1 acre = 4046.8564224 m²) to full floating-point precision.
+
 ## Known limitations / likely next steps
 
 - **Persistence (localStorage) is now implemented.** State auto-saves to `localStorage`
   (key `traverseFieldBook.v1` — kept as-is despite the app's later rename to "LTD
   Traverse Calculator", so any already-saved field job isn't silently orphaned under
   a key nothing looks for anymore) on every data-mutating action — add/edit/delete leg,
-  method toggle, start coordinate change — via `saveState()`, and
+  method toggle, start coordinate change, distance-unit toggle — via `saveState()`, and
   restores on page load via `loadState()` (both near the top of the script, right after
   the `state` object). Tab switches and other pure-navigation renders do NOT trigger a
   save, so `saveState()` is called explicitly from each mutating function rather than
