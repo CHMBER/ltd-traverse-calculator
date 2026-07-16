@@ -155,12 +155,31 @@ update the live site.
   traverse loop.
 
 **Calculator tab** (formerly "Missing Line") — 5 modes: a 2×2 toggle grid plus one
-full-width button below it for the most recently added tool:
+full-width button below it for the most recently added tool. **Every tool here uses
+the traverse's raw (as-measured) legs, never the adjusted ones** — see the "Calculator
+tab uses raw legs, not adjusted" note below; this is a firm rule for this tab, not just
+incidental to how it's built today.
 1. Inverse (2 Pts) — bearing/distance between two known N/E coordinates.
-2. Closing Leg — same calc as the live Traverse tab panel, shown standalone here too.
+2. 2 Missing Distances (`renderTwoMissingDistances()`/`computeTwoMissingDistances()`) —
+   given all legs currently on the Traverse tab as known sides, plus two more sides of
+   known bearing but unknown distance, solves both missing distances so the loop
+   closes. A 2×2 linear system (Cramer's rule): with known-sum `(sumLat, sumDep)` and
+   the two bearings' `(cos,sin)` pairs, `det = cosX·sinY − cosY·sinX` (zero means the
+   bearings are parallel/opposite — flashes an error rather than dividing by ~0).
+   Verified: the solved distances satisfy the closure equations exactly (to
+   floating-point noise, ~1e-15) when plugged back in. A negative result is shown
+   as-is with a note that it likely means one bearing needs reversing (±180°), rather
+   than silently flipping it — that's a real signal the input may be wrong, not
+   something to paper over. Replaced the old "Closing Leg" mode (which solved for one
+   unknown side, both bearing and distance) in the same grid slot — that was a special
+   case of this being a genuine generalization, not just a rename; `computeClosingLeg()`
+   itself is untouched and still backs the Traverse tab's own live panel.
 3. Radiations — bearing/distance between two points each defined by bearing+distance
    ("radiated") from the same occupied station.
-4. Bearing Compare — signed angle + turn direction (CW/CCW) between two bearings.
+4. Bearing Compare — signed angle (**A − B**, not B − A) + turn direction (CW/CCW)
+   between two bearings. Turn Direction describes turning from B to A, matching the
+   A−B sign convention (flip both together if this ever needs revisiting — the two
+   stats must stay paired, or they'll contradict each other).
 5. Offset / Chainage — a stakeout tool: given a baseline (points A→B), a chainage
    along it, and a left/right offset from it, computes the target point's N/E. See
    `computeOffset()` — the target is A plus `chainage` along the baseline's unit
@@ -176,10 +195,23 @@ full-width button below it for the most recently added tool:
    label) — keep code and UI names in sync here, unlike the intentional lat/dep vs
    Northing/Easting split elsewhere in this file.
 
+**Calculator tab uses raw legs, not adjusted.** `computeCoordinates()` (used by the
+Coordinates/Plot tab) builds points from `computeAdjusted()` — i.e. whichever of
+Compass/Least-Squares is currently selected on the Closure tab. That's correct there,
+but the Calculator tab's tools must NOT depend on that selection: the adjustment is a
+Closure-tab reporting choice, not a computational input the rest of the app should
+inherit. `computeRawCoordinates()` (right next to `computeCoordinates()`) is the same
+shape but built from `computeLegVectors()` (raw/as-measured) instead, and is what
+`traversePointOptions()`/`onPointSelect()` use — so Inverse and Offset's point pickers,
+and `computeTwoMissingDistances()`'s known-sum, all reflect the traverse exactly as
+entered, unaffected by the Closure tab's adjustment toggle. If you add a new
+Calculator-tab tool that touches traverse coordinates, use `computeRawCoordinates()`,
+not `computeCoordinates()`.
+
 **Traverse point picker** — Inverse and Offset both let any N/E field be filled from
-the traverse's own computed coordinates instead of retyped, via a shared trio just
+the traverse's own raw computed coordinates instead of retyped, via a shared trio just
 above `renderOffset()`: `traversePointOptions()` (builds the `<option>` list from
-`computeCoordinates()`), `pointPickerHtml(selectId, nFieldId, eFieldId, pointOptions)`
+`computeRawCoordinates()`), `pointPickerHtml(selectId, nFieldId, eFieldId, pointOptions)`
 (renders the `<select>`, wired to call `onPointSelect` with those exact field IDs —
 this is why it drops into any panel unchanged, no ID-naming convention required), and
 `onPointSelect(selectEl, nFieldId, eFieldId)` (fills + read-only-locks the two fields,

@@ -479,6 +479,22 @@ function computeCoordinates() {
   return pts;
 }
 
+// Same shape as computeCoordinates(), but built from the raw (as-measured) leg
+// vectors instead of the Compass/Least-Squares adjusted ones. The Calculator tab's
+// point picker (Inverse, Offset) uses this — those tools shouldn't silently depend on
+// whichever adjustment method happens to be selected on the Closure tab; the
+// adjustment is a reporting option there, not a computational input elsewhere.
+function computeRawCoordinates() {
+  const vecs = computeLegVectors();
+  let n = Number(state.startN)||0, e = Number(state.startE)||0;
+  const pts = [{ label: 'P0 (Start)', n, e }];
+  vecs.forEach((v,i) => {
+    n += v.lat; e += v.dep;
+    pts.push({ label: `P${i+1}`, n, e });
+  });
+  return pts;
+}
+
 // Enclosed area of the adjusted (closed) traverse polygon, via the shoelace formula.
 // Uses relative coordinates from (0,0) since area is translation-invariant —
 // doesn't depend on the Coordinates tab's starting N/E.
@@ -1010,7 +1026,7 @@ function renderCalculator() {
       <div class="panel-title">Calculator Mode</div>
       <div class="method-toggle-grid">
         <button class="${state.calcMode==='inverse'?'active':''}" onclick="setCalcMode('inverse')">INVERSE (2 PTS)</button>
-        <button class="${state.calcMode==='closing'?'active':''}" onclick="setCalcMode('closing')">CLOSING LEG</button>
+        <button class="${state.calcMode==='twoDist'?'active':''}" onclick="setCalcMode('twoDist')">2 MISSING DIST</button>
         <button class="${state.calcMode==='radiation'?'active':''}" onclick="setCalcMode('radiation')">RADIATIONS</button>
         <button class="${state.calcMode==='compare'?'active':''}" onclick="setCalcMode('compare')">BEARING COMPARE</button>
       </div>
@@ -1018,7 +1034,7 @@ function renderCalculator() {
         <button class="${state.calcMode==='offset'?'active':''}" onclick="setCalcMode('offset')">OFFSET / CHAINAGE</button>
       </div>
       ${state.calcMode === 'inverse' ? renderInverse()
-        : state.calcMode === 'closing' ? renderClosingLeg()
+        : state.calcMode === 'twoDist' ? renderTwoMissingDistances()
         : state.calcMode === 'radiation' ? renderRadiation()
         : state.calcMode === 'compare' ? renderCompare()
         : renderOffset()}
@@ -1044,7 +1060,7 @@ function renderInverse() {
     </div>
     <button class="btn-primary" onclick="computeInverse()" style="margin-top:10px;">CALCULATE</button>
     <div id="inverse-result"></div>
-    <div class="small-note">Computes the bearing and distance between two known coordinates (point-to-point inverse). Points can be typed manually or picked from the traverse's own computed coordinates.</div>
+    <div class="small-note">Computes the bearing and distance between two known coordinates (point-to-point inverse). Points can be typed manually or picked from the traverse's own raw (as-measured, not adjusted) coordinates.</div>
   `;
 }
 function computeInverse() {
@@ -1062,17 +1078,51 @@ function computeInverse() {
   `;
 }
 
-function renderClosingLeg() {
-  if (state.legs.length < 2) {
-    return emptyState('Enter at least 2 known legs on the Traverse tab, then use this to solve the unmeasured closing leg.');
+function renderTwoMissingDistances() {
+  if (state.legs.length < 1) {
+    return emptyState('Enter at least 1 known leg on the Traverse tab, then use this to solve two unknown-distance sides of known bearing.');
   }
-  const closing = computeClosingLeg();
   return `
-    <div class="small-note" style="margin-bottom:10px;">Using all ${state.legs.length} legs currently on the Traverse tab as the known sides — solving for the one side needed to close the loop.</div>
+    <div class="small-note" style="margin-bottom:10px;">Using all ${state.legs.length} leg${state.legs.length!==1?'s':''} currently on the Traverse tab (raw, as measured — not the adjusted values) as the known sides — solving for the distances of two additional sides whose bearings are known but whose lengths aren't.</div>
+    <div class="panel-title panel-title-sm">Side X</div>
+    <label class="f">Bearing (DDD.MMSS)</label>
+    <input id="td-bearing-x" class="bearing-input bearing-input-sm" type="text" inputmode="decimal" placeholder="e.g. 45.3000" oninput="onPlainBearingInput(this,'td-bearing-x-preview')">
+    <div id="td-bearing-x-preview" class="bearing-preview pending preview-sm">Type degrees.minutesseconds</div>
+    <div class="panel-title panel-title-sm" style="margin-top:10px;">Side Y</div>
+    <label class="f">Bearing (DDD.MMSS)</label>
+    <input id="td-bearing-y" class="bearing-input bearing-input-sm" type="text" inputmode="decimal" placeholder="e.g. 130.1500" oninput="onPlainBearingInput(this,'td-bearing-y-preview')">
+    <div id="td-bearing-y-preview" class="bearing-preview pending preview-sm">Type degrees.minutesseconds</div>
+    <button class="btn-primary" onclick="computeTwoMissingDistances()" style="margin-top:10px;">CALCULATE</button>
+    <div id="two-dist-result"></div>
+    <div class="small-note">Solves the two unknown distances that, combined with the known bearings above, close the loop back to the traverse's start. Requires the two bearings not be parallel or opposite.</div>
+  `;
+}
+function computeTwoMissingDistances() {
+  const bx = parseDDDMMSS(document.getElementById('td-bearing-x').value);
+  const by = parseDDDMMSS(document.getElementById('td-bearing-y').value);
+  if (!bx || !by) { flash('Enter both bearings in DDD.MMSS format'); return; }
+  // Raw (as-measured) sum — same source as computeClosingLeg() — not the adjusted vecs,
+  // since the Calculator tab tools should never depend on which adjustment method
+  // happens to be selected on the Closure tab.
+  const vecs = computeLegVectors();
+  const sumLat = vecs.reduce((s,v)=>s+v.lat,0);
+  const sumDep = vecs.reduce((s,v)=>s+v.dep,0);
+  const thetaX = dmsToDecimal(bx.deg,bx.min,bx.sec) * Math.PI/180;
+  const thetaY = dmsToDecimal(by.deg,by.min,by.sec) * Math.PI/180;
+  const cosX = Math.cos(thetaX), sinX = Math.sin(thetaX);
+  const cosY = Math.cos(thetaY), sinY = Math.sin(thetaY);
+  const det = cosX*sinY - cosY*sinX;
+  if (Math.abs(det) < 1e-9) { flash('The two bearings are parallel or opposite — cannot solve uniquely'); return; }
+  const c1 = -sumLat, c2 = -sumDep;
+  const distX = (c1*sinY - cosY*c2) / det;
+  const distY = (cosX*c2 - c1*sinX) / det;
+  document.getElementById('two-dist-result').innerHTML = `
+    <div class="divider"></div>
     <div class="stat-grid">
-      <div class="stat"><div class="stat-label">Closing Bearing</div><div class="stat-val accent">${fmtBearing(closing.bearing)}</div></div>
-      <div class="stat"><div class="stat-label">Closing Distance</div><div class="stat-val accent">${fmt(closing.dist,3)} m</div></div>
+      <div class="stat"><div class="stat-label">Distance X</div><div class="stat-val accent">${fmt(distX,3)} m</div></div>
+      <div class="stat"><div class="stat-label">Distance Y</div><div class="stat-val accent">${fmt(distY,3)} m</div></div>
     </div>
+    ${(distX<0||distY<0) ? '<div class="small-note">A negative distance suggests one of the entered bearings may need to be reversed (± 180°).</div>' : ''}
   `;
 }
 
@@ -1153,7 +1203,7 @@ function renderCompare() {
     </div>
     <button class="btn-primary" onclick="computeCompare()">CALCULATE</button>
     <div id="compare-result"></div>
-    <div class="small-note">Computes the angle between two bearings — how far, and which way, you'd turn from A to B.</div>
+    <div class="small-note">Computes the angle between two bearings — how far, and which way, you'd turn from B to A.</div>
   `;
 }
 function computeCompare() {
@@ -1162,26 +1212,27 @@ function computeCompare() {
   if (!a || !b) { flash('Enter both bearings in DDD.MMSS format'); return; }
   const aDec = dmsToDecimal(a.deg,a.min,a.sec);
   const bDec = dmsToDecimal(b.deg,b.min,b.sec);
-  let diff = bDec - aDec;
+  let diff = aDec - bDec;
   diff = ((diff + 180) % 360 + 360) % 360 - 180; // signed, -180..180
   const direction = diff === 0 ? '—' : (diff > 0 ? 'CLOCKWISE' : 'COUNTERCLOCKWISE');
   document.getElementById('compare-result').innerHTML = `
     <div class="divider"></div>
     <div class="stat-grid">
-      <div class="stat"><div class="stat-label">Angle (B − A)</div><div class="stat-val accent">${fmtSignedBearing(diff)}</div></div>
+      <div class="stat"><div class="stat-label">Angle (A − B)</div><div class="stat-val accent">${fmtSignedBearing(diff)}</div></div>
       <div class="stat"><div class="stat-label">Turn Direction</div><div class="stat-val" style="font-size:13px;">${direction}</div></div>
     </div>
   `;
 }
 
-// Options for the baseline point-picker <select>s — lets a baseline endpoint be
-// pulled straight from the traverse's own computed coordinates instead of retyped.
 // Traverse point picker, shared by any Calculator tool that wants to fill an N/E pair
 // from the traverse's own computed coordinates instead of retyping them (Inverse,
 // Offset). onPointSelect() takes explicit target field IDs rather than a naming
-// convention so it drops into any panel unchanged.
+// convention so it drops into any panel unchanged. Deliberately sources from
+// computeRawCoordinates() (raw/as-measured), not computeCoordinates() (adjusted) —
+// the Calculator tab's tools shouldn't change answers depending on which Closure-tab
+// adjustment method happens to be selected.
 function traversePointOptions() {
-  return computeCoordinates()
+  return computeRawCoordinates()
     .map((p,i) => `<option value="${i}">${p.label} — N ${fmt(p.n,2)}, E ${fmt(p.e,2)}</option>`)
     .join('');
 }
@@ -1203,7 +1254,7 @@ function onPointSelect(selectEl, nFieldId, eFieldId) {
     nEl.readOnly = false;
     eEl.readOnly = false;
   } else {
-    const pt = computeCoordinates()[Number(selectEl.value)];
+    const pt = computeRawCoordinates()[Number(selectEl.value)];
     if (!pt) return;
     nEl.value = pt.n.toFixed(3);
     eEl.value = pt.e.toFixed(3);
@@ -1239,7 +1290,7 @@ function renderOffset() {
     </select>
     <button class="btn-primary" onclick="computeOffset()" style="margin-top:10px;">CALCULATE</button>
     <div id="offset-result"></div>
-    <div class="small-note">Computes the coordinates of a target point set out a given chainage along baseline A→B, offset left or right of it. Baseline points can be typed manually or picked from the traverse's own computed coordinates.</div>
+    <div class="small-note">Computes the coordinates of a target point set out a given chainage along baseline A→B, offset left or right of it. Baseline points can be typed manually or picked from the traverse's own raw (as-measured, not adjusted) coordinates.</div>
   `;
 }
 
