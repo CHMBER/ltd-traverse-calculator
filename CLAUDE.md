@@ -91,9 +91,12 @@ update the live site.
   wanted again later, don't just restore the old version verbatim without checking why
   it didn't work for the user first.
 - **Distance entry unit toggle** (`state.distUnit` — `'m' | 'ftin' | 'links'`, persisted):
-  a `.method-toggle` above the Distance field lets you enter a leg's distance in
-  Metres, Feet & Inches (two separate fields — no compound-decimal encoding, avoids
-  the ambiguity a single "12.6" field would have), or Links. **`state.legs[].dist` is
+  a compact single-letter `.unit-toggle-sm` (M/F/L, 28px buttons, inline with the
+  "Unit" label via `.dist-unit-row` — deliberately much smaller than the app's other
+  toggles since it's a secondary control, not a primary input) above the Distance
+  field lets you enter a leg's distance in Metres, Feet & Inches (two separate fields
+  — no compound-decimal encoding, avoids the ambiguity a single "12.6" field would
+  have), or Links. **`state.legs[].dist` is
   always metres** — the selected unit only changes what the entry field(s) accept;
   `saveLeg()` converts via `readDistInputAsMeters()` before storing, so every other
   calculation and display in the app (closure, adjustment, area, tables) is completely
@@ -106,6 +109,14 @@ update the live site.
   Bearing field isn't bound to `state` (see the no-virtual-DOM note above). Conversion
   constants (`FEET_TO_M`, `LINK_TO_M`, `PERCH_TO_M2`) live once near the top of SURVEY
   MATH and are shared with the Convert tab below.
+- **±90° bearing buttons** (`adjustBearing90(sign)`, just below the bearing preview):
+  rotates whatever bearing is currently in `#in-bearing` by ±90° (wrapping 0–360°)
+  instead of requiring it to be retyped from scratch — handy for quickly turning a
+  perpendicular off a line you just entered. Reuses `azimuthToBearing()` to decompose
+  the rotated azimuth cleanly (so it inherits that function's carry-safe rounding) and
+  `updateCompassNeedle()` to refresh the preview text and needle, matching what live
+  typing does. Flashes an error rather than silently no-op'ing if the bearing field is
+  empty/incomplete when pressed.
 
 **Closure tab**
 - Summary stats, in this order: Linear Misclose, Misclose Bearing, Perimeter, Precision Ratio.

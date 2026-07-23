@@ -162,6 +162,15 @@
   .method-toggle-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 12px; }
   .method-toggle-grid button { background: var(--input-bg); color: var(--text-secondary); border: 1px solid var(--input-border); padding: 9px 6px; font-size: 11.5px; }
   .method-toggle-grid button.active { background: rgba(255,194,32,0.12); color: var(--accent); border-color: var(--accent); }
+  .dist-unit-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .unit-toggle-sm { display: flex; gap: 4px; }
+  .unit-toggle-sm button {
+    width: 28px; padding: 5px 0; background: var(--input-bg); color: var(--text-secondary);
+    border: 1px solid var(--input-border); border-radius: 6px; font-size: 12px;
+  }
+  .unit-toggle-sm button.active { background: rgba(255,194,32,0.12); color: var(--accent); border-color: var(--accent); }
+  .bearing-quarter-row { display: flex; gap: 6px; margin-top: 6px; }
+  .bearing-quarter-row button { flex: 1; padding: 7px; font-size: 12px; }
 
   /* ---- Compass dial ---- */
   .leg-entry-row { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 10px; }
@@ -584,11 +593,13 @@ function fmtSignedBearing(decDeg) {
 ========================================================= */
 function renderDistSection() {
   return `
-    <label class="f">Distance Unit</label>
-    <div class="method-toggle" style="margin-bottom:8px;">
-      <button class="${state.distUnit==='m'?'active':''}" onclick="setDistUnit('m')">METRES</button>
-      <button class="${state.distUnit==='ftin'?'active':''}" onclick="setDistUnit('ftin')">FT-IN</button>
-      <button class="${state.distUnit==='links'?'active':''}" onclick="setDistUnit('links')">LINKS</button>
+    <div class="dist-unit-row">
+      <label class="f" style="margin-bottom:0;">Unit</label>
+      <div class="unit-toggle-sm">
+        <button class="${state.distUnit==='m'?'active':''}" onclick="setDistUnit('m')" title="Metres">M</button>
+        <button class="${state.distUnit==='ftin'?'active':''}" onclick="setDistUnit('ftin')" title="Feet &amp; Inches">F</button>
+        <button class="${state.distUnit==='links'?'active':''}" onclick="setDistUnit('links')" title="Links">L</button>
+      </div>
     </div>
     ${renderDistUnitFields()}
   `;
@@ -715,6 +726,10 @@ function renderTraverse() {
           <label class="f">Bearing / Azimuth — DDD.MMSS</label>
           <input id="in-bearing" class="bearing-input" type="text" inputmode="decimal" placeholder="e.g. 125.3045" autocomplete="off">
           <div id="bearing-preview" class="bearing-preview pending"></div>
+          <div class="bearing-quarter-row">
+            <button type="button" class="btn-ghost" onclick="adjustBearing90(-1)">− 90°</button>
+            <button type="button" class="btn-ghost" onclick="adjustBearing90(1)">+ 90°</button>
+          </div>
           <div id="dist-section-container" style="margin-top:8px;">${renderDistSection()}</div>
         </div>
         <div class="compass-wrap-side">${compassSvg()}</div>
@@ -807,6 +822,20 @@ function updateCompassNeedle() {
   const needle = document.getElementById('compass-needle');
   needle.setAttribute('x2', x2);
   needle.setAttribute('y2', y2);
+}
+
+// Quick turn-90° buttons beside the bearing field — rotates whatever bearing is
+// currently entered by +/-90 (wrapping 0-360) rather than requiring it to be retyped.
+function adjustBearing90(sign) {
+  const bearingEl = document.getElementById('in-bearing');
+  if (!bearingEl) return;
+  const parsed = parseDDDMMSS(bearingEl.value);
+  if (!parsed) { flash('Enter a bearing first'); return; }
+  const currentAz = dmsToDecimal(parsed.deg, parsed.min, parsed.sec);
+  const newAz = ((currentAz + sign*90) % 360 + 360) % 360;
+  const b = azimuthToBearing(newAz);
+  bearingEl.value = `${b.deg}.${String(b.min).padStart(2,'0')}${String(b.sec).padStart(2,'0')}`;
+  updateCompassNeedle();
 }
 
 function emptyState(msg) {
