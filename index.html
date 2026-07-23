@@ -172,6 +172,26 @@
   .bearing-quarter-row { display: flex; gap: 6px; margin-top: 6px; }
   .bearing-quarter-row button { flex: 1; padding: 7px; font-size: 12px; }
 
+  /* ---- Calculator memory (store/recall) ---- */
+  .calc-memory-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .calc-memory-label {
+    font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 11px;
+    color: var(--text-secondary); letter-spacing: 0.04em;
+  }
+  .calc-memory-value {
+    flex: 1; font-family: 'JetBrains Mono', monospace; font-size: 14px; font-weight: 700;
+    color: var(--accent-2); background: var(--input-bg); border: 1px solid var(--input-border);
+    border-radius: 6px; padding: 5px 8px;
+  }
+  .calc-memory-clear { padding: 6px 10px; font-size: 10px; }
+  .stat.storable { cursor: pointer; }
+  .field-with-recall { display: flex; gap: 4px; }
+  .field-with-recall input { flex: 1; min-width: 0; }
+  .btn-recall {
+    flex-shrink: 0; width: 28px; padding: 0; font-size: 11px; background: var(--input-bg);
+    color: var(--text-secondary); border: 1px solid var(--input-border); border-radius: 6px;
+  }
+
   /* ---- Compass dial ---- */
   .leg-entry-row { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 10px; }
   .leg-entry-fields { flex: 1; min-width: 0; }
@@ -594,7 +614,7 @@ function fmtSignedBearing(decDeg) {
 function renderDistSection() {
   return `
     <div class="dist-unit-row">
-      <label class="f" style="margin-bottom:0;">Unit</label>
+      <label class="f" style="margin-bottom:0;">Distance</label>
       <div class="unit-toggle-sm">
         <button class="${state.distUnit==='m'?'active':''}" onclick="setDistUnit('m')" title="Metres">M</button>
         <button class="${state.distUnit==='ftin'?'active':''}" onclick="setDistUnit('ftin')" title="Feet &amp; Inches">F</button>
@@ -615,12 +635,10 @@ function renderDistUnitFields() {
     `;
   } else if (state.distUnit === 'links') {
     return `
-      <label class="f">Distance (links)</label>
       <input id="in-dist-links" class="dist-input-lg" type="number" inputmode="decimal" enterkeyhint="done" placeholder="0.000" step="0.001">
     `;
   }
   return `
-    <label class="f">Distance (m)</label>
     <input id="in-dist" class="dist-input-lg" type="number" inputmode="decimal" enterkeyhint="done" placeholder="0.000" step="0.001">
   `;
 }
@@ -845,12 +863,34 @@ function emptyState(msg) {
   </div>`;
 }
 
+// True when none of the currently-visible distance unit's field(s) have anything typed.
+function isDistInputEmpty() {
+  if (state.distUnit === 'ftin') {
+    return !document.getElementById('in-dist-ft').value && !document.getElementById('in-dist-in').value;
+  } else if (state.distUnit === 'links') {
+    return !document.getElementById('in-dist-links').value;
+  }
+  return !document.getElementById('in-dist').value;
+}
+
 function saveLeg() {
   const bearingEl = document.getElementById('in-bearing');
   const raw = bearingEl.value;
-  const parsed = parseDDDMMSS(raw);
-  if (!raw || !parsed) { flash('Enter a bearing in DDD.MMSS format'); return; }
-  const dist = readDistInputAsMeters();
+  // Leaving Bearing or Distance blank when adding a new leg repeats the previous leg's
+  // value for that field — common in the field (a run of legs sharing a bearing, or a
+  // series of equal-length offsets). Only applies when adding, not editing an existing
+  // leg, and each field falls back independently.
+  const previousLeg = state.legs.length > 0 ? state.legs[state.legs.length - 1] : null;
+  const isAdding = state.editingLegId === null;
+
+  const parsed = (!raw && isAdding && previousLeg)
+    ? { deg: previousLeg.deg, min: previousLeg.min, sec: previousLeg.sec }
+    : parseDDDMMSS(raw);
+  if (!parsed) { flash('Enter a bearing in DDD.MMSS format'); return; }
+
+  const dist = (isDistInputEmpty() && isAdding && previousLeg)
+    ? (Number(previousLeg.dist) || null)
+    : readDistInputAsMeters();
   if (dist === null) { flash('Enter a distance greater than 0'); return; }
 
   if (state.editingLegId !== null) {
@@ -1053,20 +1093,22 @@ function renderCalculator() {
   return `
     <div class="panel">
       <div class="panel-title">Calculator Mode</div>
+      <div class="calc-memory-row">
+        <span class="calc-memory-label">M</span>
+        <span id="calc-memory-value" class="calc-memory-value">${calcMemory !== null ? fmt(calcMemory,3) : '—'}</span>
+        <button type="button" class="btn-ghost calc-memory-clear" onclick="clearCalcMemory()">CLEAR</button>
+      </div>
+      <div class="small-note" style="margin-bottom:10px;">Tap any result below to store it in memory (M); tap the M button beside an input to recall it.</div>
       <div class="method-toggle-grid">
         <button class="${state.calcMode==='inverse'?'active':''}" onclick="setCalcMode('inverse')">INVERSE (2 PTS)</button>
         <button class="${state.calcMode==='twoDist'?'active':''}" onclick="setCalcMode('twoDist')">2 MISSING DIST</button>
-        <button class="${state.calcMode==='radiation'?'active':''}" onclick="setCalcMode('radiation')">RADIATIONS</button>
+        <button class="${state.calcMode==='eccentric'?'active':''}" onclick="setCalcMode('eccentric')">ECCENTRIC</button>
         <button class="${state.calcMode==='compare'?'active':''}" onclick="setCalcMode('compare')">BEARING COMPARE</button>
-      </div>
-      <div class="method-toggle-grid" style="grid-template-columns:1fr;">
-        <button class="${state.calcMode==='offset'?'active':''}" onclick="setCalcMode('offset')">OFFSET / CHAINAGE</button>
       </div>
       ${state.calcMode === 'inverse' ? renderInverse()
         : state.calcMode === 'twoDist' ? renderTwoMissingDistances()
-        : state.calcMode === 'radiation' ? renderRadiation()
-        : state.calcMode === 'compare' ? renderCompare()
-        : renderOffset()}
+        : state.calcMode === 'eccentric' ? renderEccentric()
+        : renderCompare()}
     </div>
   `;
 }
@@ -1078,14 +1120,14 @@ function renderInverse() {
     <div class="panel-title panel-title-sm">Point 1</div>
     ${pointPickerHtml('mi-p1-point', 'mi-n1', 'mi-e1', pointOptions)}
     <div class="row">
-      <div><label class="f">N1</label><input id="mi-n1" type="number" inputmode="decimal" placeholder="Northing"></div>
-      <div><label class="f">E1</label><input id="mi-e1" type="number" inputmode="decimal" placeholder="Easting"></div>
+      ${numFieldWithRecall('mi-n1', 'N1', 'Northing')}
+      ${numFieldWithRecall('mi-e1', 'E1', 'Easting')}
     </div>
     <div class="panel-title panel-title-sm" style="margin-top:10px;">Point 2</div>
     ${pointPickerHtml('mi-p2-point', 'mi-n2', 'mi-e2', pointOptions)}
     <div class="row">
-      <div><label class="f">N2</label><input id="mi-n2" type="number" inputmode="decimal" placeholder="Northing"></div>
-      <div><label class="f">E2</label><input id="mi-e2" type="number" inputmode="decimal" placeholder="Easting"></div>
+      ${numFieldWithRecall('mi-n2', 'N2', 'Northing')}
+      ${numFieldWithRecall('mi-e2', 'E2', 'Easting')}
     </div>
     <button class="btn-primary" onclick="computeInverse()" style="margin-top:10px;">CALCULATE</button>
     <div id="inverse-result"></div>
@@ -1101,57 +1143,73 @@ function computeInverse() {
   document.getElementById('inverse-result').innerHTML = `
     <div class="divider"></div>
     <div class="stat-grid">
-      <div class="stat"><div class="stat-label">Bearing</div><div class="stat-val accent">${fmtBearing(r.bearing)}</div></div>
-      <div class="stat"><div class="stat-label">Distance</div><div class="stat-val accent">${fmt(r.dist,3)} m</div></div>
+      <div class="stat storable" onclick="storeToMemory(${r.az})"><div class="stat-label">Bearing</div><div class="stat-val accent">${fmtBearing(r.bearing)}</div></div>
+      <div class="stat storable" onclick="storeToMemory(${r.dist})"><div class="stat-label">Distance</div><div class="stat-val accent">${fmt(r.dist,3)} m</div></div>
     </div>
   `;
 }
 
+// Solves the two missing side lengths of a triangle A-B-C: side A->B is fully known
+// (two points), and the bearings from A and from B toward the third point C are known,
+// but AC and BC are not. This is the standard "resection by two bearings" / "bearing
+// intersection" problem — see computeTwoMissingDistances() for the derivation.
 function renderTwoMissingDistances() {
-  if (state.legs.length < 1) {
-    return emptyState('Enter at least 1 known leg on the Traverse tab, then use this to solve two unknown-distance sides of known bearing.');
-  }
+  const pointOptions = traversePointOptions();
   return `
-    <div class="small-note" style="margin-bottom:10px;">Using all ${state.legs.length} leg${state.legs.length!==1?'s':''} currently on the Traverse tab (raw, as measured — not the adjusted values) as the known sides — solving for the distances of two additional sides whose bearings are known but whose lengths aren't.</div>
-    <div class="panel-title panel-title-sm">Side X</div>
-    <label class="f">Bearing (DDD.MMSS)</label>
-    <input id="td-bearing-x" class="bearing-input bearing-input-sm" type="text" inputmode="decimal" placeholder="e.g. 45.3000" oninput="onPlainBearingInput(this,'td-bearing-x-preview')">
-    <div id="td-bearing-x-preview" class="bearing-preview pending preview-sm">Type degrees.minutesseconds</div>
-    <div class="panel-title panel-title-sm" style="margin-top:10px;">Side Y</div>
-    <label class="f">Bearing (DDD.MMSS)</label>
-    <input id="td-bearing-y" class="bearing-input bearing-input-sm" type="text" inputmode="decimal" placeholder="e.g. 130.1500" oninput="onPlainBearingInput(this,'td-bearing-y-preview')">
-    <div id="td-bearing-y-preview" class="bearing-preview pending preview-sm">Type degrees.minutesseconds</div>
+    <div class="small-note" style="margin-bottom:10px;">Solves the two missing side lengths of a triangle A–B–C: given the fully known side A→B and the bearings from A and from B toward the third point C, computes distances A–C and B–C (plus point C's coordinates).</div>
+    <div class="panel-title panel-title-sm">Point A</div>
+    ${pointPickerHtml('tri-a-point', 'tri-an', 'tri-ae', pointOptions)}
+    <div class="row">
+      ${numFieldWithRecall('tri-an', 'Northing', 'Northing')}
+      ${numFieldWithRecall('tri-ae', 'Easting', 'Easting')}
+    </div>
+    <div class="panel-title panel-title-sm" style="margin-top:10px;">Point B</div>
+    ${pointPickerHtml('tri-b-point', 'tri-bn', 'tri-be', pointOptions)}
+    <div class="row">
+      ${numFieldWithRecall('tri-bn', 'Northing', 'Northing')}
+      ${numFieldWithRecall('tri-be', 'Easting', 'Easting')}
+    </div>
+    <div class="panel-title panel-title-sm" style="margin-top:10px;">Bearing A → C</div>
+    <input id="tri-bearing-ac" class="bearing-input bearing-input-sm" type="text" inputmode="decimal" placeholder="e.g. 45.3000" oninput="onPlainBearingInput(this,'tri-bearing-ac-preview')">
+    <div id="tri-bearing-ac-preview" class="bearing-preview pending preview-sm">Type degrees.minutesseconds</div>
+    <div class="panel-title panel-title-sm" style="margin-top:10px;">Bearing B → C</div>
+    <input id="tri-bearing-bc" class="bearing-input bearing-input-sm" type="text" inputmode="decimal" placeholder="e.g. 130.1500" oninput="onPlainBearingInput(this,'tri-bearing-bc-preview')">
+    <div id="tri-bearing-bc-preview" class="bearing-preview pending preview-sm">Type degrees.minutesseconds</div>
     <button class="btn-primary" onclick="computeTwoMissingDistances()" style="margin-top:10px;">CALCULATE</button>
     <div id="two-dist-result"></div>
-    <div class="small-note">Solves the two unknown distances that, combined with the known bearings above, close the loop back to the traverse's start. Requires the two bearings not be parallel or opposite.</div>
   `;
 }
 function computeTwoMissingDistances() {
-  const bx = parseDDDMMSS(document.getElementById('td-bearing-x').value);
-  const by = parseDDDMMSS(document.getElementById('td-bearing-y').value);
-  if (!bx || !by) { flash('Enter both bearings in DDD.MMSS format'); return; }
-  // Raw (as-measured) sum — same source as computeClosingLeg() — not the adjusted vecs,
-  // since the Calculator tab tools should never depend on which adjustment method
-  // happens to be selected on the Closure tab.
-  const vecs = computeLegVectors();
-  const sumLat = vecs.reduce((s,v)=>s+v.lat,0);
-  const sumDep = vecs.reduce((s,v)=>s+v.dep,0);
-  const thetaX = dmsToDecimal(bx.deg,bx.min,bx.sec) * Math.PI/180;
-  const thetaY = dmsToDecimal(by.deg,by.min,by.sec) * Math.PI/180;
-  const cosX = Math.cos(thetaX), sinX = Math.sin(thetaX);
-  const cosY = Math.cos(thetaY), sinY = Math.sin(thetaY);
-  const det = cosX*sinY - cosY*sinX;
-  if (Math.abs(det) < 1e-9) { flash('The two bearings are parallel or opposite — cannot solve uniquely'); return; }
-  const c1 = -sumLat, c2 = -sumDep;
-  const distX = (c1*sinY - cosY*c2) / det;
-  const distY = (cosX*c2 - c1*sinX) / det;
+  const an = Number(document.getElementById('tri-an').value)||0;
+  const ae = Number(document.getElementById('tri-ae').value)||0;
+  const bn = Number(document.getElementById('tri-bn').value)||0;
+  const be = Number(document.getElementById('tri-be').value)||0;
+  const bAC = parseDDDMMSS(document.getElementById('tri-bearing-ac').value);
+  const bBC = parseDDDMMSS(document.getElementById('tri-bearing-bc').value);
+  if (!bAC || !bBC) { flash('Enter both bearings in DDD.MMSS format'); return; }
+  const dN = bn - an, dE = be - ae;
+  const thetaAC = dmsToDecimal(bAC.deg,bAC.min,bAC.sec) * Math.PI/180;
+  const thetaBC = dmsToDecimal(bBC.deg,bBC.min,bBC.sec) * Math.PI/180;
+  const cosAC = Math.cos(thetaAC), sinAC = Math.sin(thetaAC);
+  const cosBC = Math.cos(thetaBC), sinBC = Math.sin(thetaBC);
+  // C = A + AC*(cosAC,sinAC) = B + BC*(cosBC,sinBC)
+  //   => AC*cosAC - BC*cosBC = dN ,  AC*sinAC - BC*sinBC = dE
+  const det = cosAC*(-sinBC) - (-cosBC)*sinAC; // = sin(thetaAC - thetaBC)
+  if (Math.abs(det) < 1e-9) { flash('Bearings A→C and B→C are parallel — cannot solve a unique triangle'); return; }
+  const distAC = (dN*(-sinBC) - (-cosBC)*dE) / det;
+  const distBC = (cosAC*dE - dN*sinAC) / det;
+  const cN = an + distAC*cosAC, cE = ae + distAC*sinAC;
   document.getElementById('two-dist-result').innerHTML = `
     <div class="divider"></div>
     <div class="stat-grid">
-      <div class="stat"><div class="stat-label">Distance X</div><div class="stat-val accent">${fmt(distX,3)} m</div></div>
-      <div class="stat"><div class="stat-label">Distance Y</div><div class="stat-val accent">${fmt(distY,3)} m</div></div>
+      <div class="stat storable" onclick="storeToMemory(${distAC})"><div class="stat-label">Distance A–C</div><div class="stat-val accent">${fmt(distAC,3)} m</div></div>
+      <div class="stat storable" onclick="storeToMemory(${distBC})"><div class="stat-label">Distance B–C</div><div class="stat-val accent">${fmt(distBC,3)} m</div></div>
     </div>
-    ${(distX<0||distY<0) ? '<div class="small-note">A negative distance suggests one of the entered bearings may need to be reversed (± 180°).</div>' : ''}
+    <div class="stat-grid" style="margin-top:8px;">
+      <div class="stat storable" onclick="storeToMemory(${cN})"><div class="stat-label">Point C Northing</div><div class="stat-val accent">${fmt(cN,3)}</div></div>
+      <div class="stat storable" onclick="storeToMemory(${cE})"><div class="stat-label">Point C Easting</div><div class="stat-val accent">${fmt(cE,3)}</div></div>
+    </div>
+    ${(distAC<0||distBC<0) ? '<div class="small-note">A negative distance suggests one of the entered bearings may need to be reversed (± 180°).</div>' : ''}
   `;
 }
 
@@ -1165,53 +1223,47 @@ function onPlainBearingInput(el, previewId) {
   }
 }
 
-function renderRadiation() {
+function renderEccentric() {
   return `
-    <div class="panel-title panel-title-sm">Radiation 1</div>
+    <div class="panel-title panel-title-sm">Eccentric 1</div>
     <div class="row">
       <div>
         <label class="f">Bearing (DDD.MMSS)</label>
-        <input id="rad1-bearing" class="bearing-input bearing-input-sm" type="text" inputmode="decimal" placeholder="e.g. 45.3000" oninput="onPlainBearingInput(this,'rad1-bearing-preview')">
-        <div id="rad1-bearing-preview" class="bearing-preview pending preview-sm">Type degrees.minutesseconds</div>
+        <input id="ecc1-bearing" class="bearing-input bearing-input-sm" type="text" inputmode="decimal" placeholder="e.g. 45.3000" oninput="onPlainBearingInput(this,'ecc1-bearing-preview')">
+        <div id="ecc1-bearing-preview" class="bearing-preview pending preview-sm">Type degrees.minutesseconds</div>
       </div>
-      <div>
-        <label class="f">Distance (m)</label>
-        <input id="rad1-dist" type="number" inputmode="decimal" placeholder="0.000" step="0.001">
-      </div>
+      ${numFieldWithRecall('ecc1-dist', 'Distance (m)', '0.000')}
     </div>
-    <div class="panel-title panel-title-sm" style="margin-top:10px;">Radiation 2</div>
+    <div class="panel-title panel-title-sm" style="margin-top:10px;">Eccentric 2</div>
     <div class="row">
       <div>
         <label class="f">Bearing (DDD.MMSS)</label>
-        <input id="rad2-bearing" class="bearing-input bearing-input-sm" type="text" inputmode="decimal" placeholder="e.g. 130.1500" oninput="onPlainBearingInput(this,'rad2-bearing-preview')">
-        <div id="rad2-bearing-preview" class="bearing-preview pending preview-sm">Type degrees.minutesseconds</div>
+        <input id="ecc2-bearing" class="bearing-input bearing-input-sm" type="text" inputmode="decimal" placeholder="e.g. 130.1500" oninput="onPlainBearingInput(this,'ecc2-bearing-preview')">
+        <div id="ecc2-bearing-preview" class="bearing-preview pending preview-sm">Type degrees.minutesseconds</div>
       </div>
-      <div>
-        <label class="f">Distance (m)</label>
-        <input id="rad2-dist" type="number" inputmode="decimal" placeholder="0.000" step="0.001">
-      </div>
+      ${numFieldWithRecall('ecc2-dist', 'Distance (m)', '0.000')}
     </div>
-    <button class="btn-primary" onclick="computeRadiation()" style="margin-top:10px;">CALCULATE</button>
-    <div id="radiation-result"></div>
+    <button class="btn-primary" onclick="computeEccentric()" style="margin-top:10px;">CALCULATE</button>
+    <div id="eccentric-result"></div>
     <div class="small-note">Computes the bearing and distance between two points radiated (bearing + distance) from the same occupied station.</div>
   `;
 }
-function computeRadiation() {
-  const b1 = parseDDDMMSS(document.getElementById('rad1-bearing').value);
-  const b2 = parseDDDMMSS(document.getElementById('rad2-bearing').value);
+function computeEccentric() {
+  const b1 = parseDDDMMSS(document.getElementById('ecc1-bearing').value);
+  const b2 = parseDDDMMSS(document.getElementById('ecc2-bearing').value);
   if (!b1 || !b2) { flash('Enter both bearings in DDD.MMSS format'); return; }
-  const d1 = Number(document.getElementById('rad1-dist').value)||0;
-  const d2 = Number(document.getElementById('rad2-dist').value)||0;
+  const d1 = Number(document.getElementById('ecc1-dist').value)||0;
+  const d2 = Number(document.getElementById('ecc2-dist').value)||0;
   const az1 = dmsToDecimal(b1.deg,b1.min,b1.sec) * Math.PI/180;
   const az2 = dmsToDecimal(b2.deg,b2.min,b2.sec) * Math.PI/180;
   const n1 = d1*Math.cos(az1), e1 = d1*Math.sin(az1);
   const n2 = d2*Math.cos(az2), e2 = d2*Math.sin(az2);
   const r = inverse(n1,e1,n2,e2);
-  document.getElementById('radiation-result').innerHTML = `
+  document.getElementById('eccentric-result').innerHTML = `
     <div class="divider"></div>
     <div class="stat-grid">
-      <div class="stat"><div class="stat-label">Bearing (Pt1 → Pt2)</div><div class="stat-val accent">${fmtBearing(r.bearing)}</div></div>
-      <div class="stat"><div class="stat-label">Distance</div><div class="stat-val accent">${fmt(r.dist,3)} m</div></div>
+      <div class="stat storable" onclick="storeToMemory(${r.az})"><div class="stat-label">Bearing (Pt1 → Pt2)</div><div class="stat-val accent">${fmtBearing(r.bearing)}</div></div>
+      <div class="stat storable" onclick="storeToMemory(${r.dist})"><div class="stat-label">Distance</div><div class="stat-val accent">${fmt(r.dist,3)} m</div></div>
     </div>
   `;
 }
@@ -1247,19 +1299,58 @@ function computeCompare() {
   document.getElementById('compare-result').innerHTML = `
     <div class="divider"></div>
     <div class="stat-grid">
-      <div class="stat"><div class="stat-label">Angle (A − B)</div><div class="stat-val accent">${fmtSignedBearing(diff)}</div></div>
+      <div class="stat storable" onclick="storeToMemory(${diff})"><div class="stat-label">Angle (A − B)</div><div class="stat-val accent">${fmtSignedBearing(diff)}</div></div>
       <div class="stat"><div class="stat-label">Turn Direction</div><div class="stat-val" style="font-size:13px;">${direction}</div></div>
+    </div>
+  `;
+}
+
+// Single shared memory register for the Calculator tab — a scratch value you can tap
+// any result to store into, then recall into any plain numeric input via its "M"
+// button. Not persisted to localStorage, consistent with the Calculator tab's other
+// tools being stateless scratch pads (see CLAUDE.md).
+let calcMemory = null;
+
+function storeToMemory(value) {
+  calcMemory = value;
+  const el = document.getElementById('calc-memory-value');
+  if (el) el.textContent = fmt(calcMemory, 3);
+  flash(`Stored ${fmt(calcMemory,3)} to memory`);
+}
+
+function recallFromMemory(fieldId) {
+  if (calcMemory === null) { flash('Memory is empty'); return; }
+  const el = document.getElementById(fieldId);
+  if (el) el.value = calcMemory.toFixed(3);
+}
+
+function clearCalcMemory() {
+  calcMemory = null;
+  const el = document.getElementById('calc-memory-value');
+  if (el) el.textContent = '—';
+}
+
+// Plain numeric input with a small "M" recall button beside it — used for every
+// non-bearing field in the Calculator tab's tools so memory recall is consistent.
+function numFieldWithRecall(id, labelText, placeholder) {
+  return `
+    <div>
+      <label class="f">${labelText}</label>
+      <div class="field-with-recall">
+        <input id="${id}" type="number" inputmode="decimal" placeholder="${placeholder}">
+        <button type="button" class="btn-recall" onclick="recallFromMemory('${id}')" title="Recall from memory">M</button>
+      </div>
     </div>
   `;
 }
 
 // Traverse point picker, shared by any Calculator tool that wants to fill an N/E pair
 // from the traverse's own computed coordinates instead of retyping them (Inverse,
-// Offset). onPointSelect() takes explicit target field IDs rather than a naming
-// convention so it drops into any panel unchanged. Deliberately sources from
-// computeRawCoordinates() (raw/as-measured), not computeCoordinates() (adjusted) —
-// the Calculator tab's tools shouldn't change answers depending on which Closure-tab
-// adjustment method happens to be selected.
+// the triangle-solver's Points A/B). onPointSelect() takes explicit target field IDs
+// rather than a naming convention so it drops into any panel unchanged. Deliberately
+// sources from computeRawCoordinates() (raw/as-measured), not computeCoordinates()
+// (adjusted) — the Calculator tab's tools shouldn't change answers depending on which
+// Closure-tab adjustment method happens to be selected.
 function traversePointOptions() {
   return computeRawCoordinates()
     .map((p,i) => `<option value="${i}">${p.label} — N ${fmt(p.n,2)}, E ${fmt(p.e,2)}</option>`)
@@ -1290,62 +1381,6 @@ function onPointSelect(selectEl, nFieldId, eFieldId) {
     nEl.readOnly = true;
     eEl.readOnly = true;
   }
-}
-
-function renderOffset() {
-  const pointOptions = traversePointOptions();
-  return `
-    <div class="panel-title panel-title-sm">Baseline Start (A)</div>
-    ${pointPickerHtml('off-a-point', 'off-an', 'off-ae', pointOptions)}
-    <div class="row">
-      <div><label class="f">Northing</label><input id="off-an" type="number" inputmode="decimal" placeholder="Northing"></div>
-      <div><label class="f">Easting</label><input id="off-ae" type="number" inputmode="decimal" placeholder="Easting"></div>
-    </div>
-    <div class="panel-title panel-title-sm" style="margin-top:10px;">Baseline End (B)</div>
-    ${pointPickerHtml('off-b-point', 'off-bn', 'off-be', pointOptions)}
-    <div class="row">
-      <div><label class="f">Northing</label><input id="off-bn" type="number" inputmode="decimal" placeholder="Northing"></div>
-      <div><label class="f">Easting</label><input id="off-be" type="number" inputmode="decimal" placeholder="Easting"></div>
-    </div>
-    <div class="panel-title panel-title-sm" style="margin-top:10px;">Chainage &amp; Offset</div>
-    <div class="row">
-      <div><label class="f">Chainage from A (m)</label><input id="off-chainage" type="number" inputmode="decimal" placeholder="0.000" step="0.001"></div>
-      <div><label class="f">Offset (m)</label><input id="off-offset-mag" type="number" inputmode="decimal" placeholder="0.000" step="0.001"></div>
-    </div>
-    <label class="f">Side (facing A→B)</label>
-    <select id="off-side">
-      <option value="right" selected>Right</option>
-      <option value="left">Left</option>
-    </select>
-    <button class="btn-primary" onclick="computeOffset()" style="margin-top:10px;">CALCULATE</button>
-    <div id="offset-result"></div>
-    <div class="small-note">Computes the coordinates of a target point set out a given chainage along baseline A→B, offset left or right of it. Baseline points can be typed manually or picked from the traverse's own raw (as-measured, not adjusted) coordinates.</div>
-  `;
-}
-
-function computeOffset() {
-  const an = Number(document.getElementById('off-an').value)||0;
-  const ae = Number(document.getElementById('off-ae').value)||0;
-  const bn = Number(document.getElementById('off-bn').value)||0;
-  const be = Number(document.getElementById('off-be').value)||0;
-  const dN = bn-an, dE = be-ae;
-  const baseLen = Math.sqrt(dN*dN + dE*dE);
-  if (baseLen === 0) { flash('Baseline points A and B must be different'); return; }
-  const chainage = Number(document.getElementById('off-chainage').value)||0;
-  const offsetMag = Math.abs(Number(document.getElementById('off-offset-mag').value)||0);
-  const side = document.getElementById('off-side').value;
-  const signedOffset = side === 'left' ? -offsetMag : offsetMag; // +right / -left of A→B
-  // Target = A + chainage along the baseline's unit vector, + signed offset along
-  // its right-perpendicular unit vector (-dE/L, dN/L) — see CLAUDE.md for the derivation.
-  const targetN = an + (chainage*dN - signedOffset*dE) / baseLen;
-  const targetE = ae + (chainage*dE + signedOffset*dN) / baseLen;
-  document.getElementById('offset-result').innerHTML = `
-    <div class="divider"></div>
-    <div class="stat-grid">
-      <div class="stat"><div class="stat-label">Target Northing</div><div class="stat-val accent">${fmt(targetN,3)}</div></div>
-      <div class="stat"><div class="stat-label">Target Easting</div><div class="stat-val accent">${fmt(targetE,3)}</div></div>
-    </div>
-  `;
 }
 
 /* =========================================================

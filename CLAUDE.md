@@ -27,7 +27,7 @@ update the live site.
   used.
 - `azimuthToBearing()` (decimal degrees → `{deg,min,sec}` for display, used everywhere
   a computed bearing is shown — Misclose Bearing, Closing Leg, Comp. Brg, Inverse/
-  Radiation/Offset results) rounds once at the arcsecond level (`Math.round(az*3600)`)
+  Eccentric results) rounds once at the arcsecond level (`Math.round(az*3600)`)
   and decomposes via integer division/modulo. Previously it floored degrees, floored
   minutes, then separately rounded seconds — that cascading floor+floor+round could
   produce an invalid carry like `29'60"` instead of `30'00"` whenever the true value's
@@ -68,7 +68,7 @@ update the live site.
   The live bearing-preview line below it is blank until you start typing (no "Type
   degrees.minutesseconds" placeholder — that was judged unnecessary clutter) — this only
   applies to `#bearing-preview` specifically; the shared `bearingPreviewText()` helper
-  used by Radiation/Compare still returns that hint text for their previews, unchanged.
+  used by Eccentric/Compare still returns that hint text for their previews, unchanged.
 - Distance input uses `.dist-input-lg` (20px font, same padding as `.bearing-input`) so
   it visually matches the bearing field instead of looking like a smaller, secondary
   input — they're equally primary. `.leg-entry-row` carries a 10px margin-bottom so
@@ -91,24 +91,24 @@ update the live site.
   wanted again later, don't just restore the old version verbatim without checking why
   it didn't work for the user first.
 - **Distance entry unit toggle** (`state.distUnit` — `'m' | 'ftin' | 'links'`, persisted):
-  a compact single-letter `.unit-toggle-sm` (M/F/L, 28px buttons, inline with the
-  "Unit" label via `.dist-unit-row` — deliberately much smaller than the app's other
-  toggles since it's a secondary control, not a primary input) above the Distance
-  field lets you enter a leg's distance in Metres, Feet & Inches (two separate fields
-  — no compound-decimal encoding, avoids the ambiguity a single "12.6" field would
-  have), or Links. **`state.legs[].dist` is
-  always metres** — the selected unit only changes what the entry field(s) accept;
-  `saveLeg()` converts via `readDistInputAsMeters()` before storing, so every other
-  calculation and display in the app (closure, adjustment, area, tables) is completely
-  unaffected and stays in metres. `editLeg()` uses `setDistInputsFromMeters()` to
-  populate the field(s) in whichever unit is *currently* selected, converting back from
-  the stored metres value. The toggle+field(s) live in their own
-  `#dist-section-container` fragment (`renderDistSection()`), regenerated in place by
-  `setDistUnit()` rather than through a full `render()` — this specifically avoids
-  wiping out an in-progress Bearing entry, which a full re-render would do since the
-  Bearing field isn't bound to `state` (see the no-virtual-DOM note above). Conversion
-  constants (`FEET_TO_M`, `LINK_TO_M`, `PERCH_TO_M2`) live once near the top of SURVEY
-  MATH and are shared with the Convert tab below.
+  a compact single-letter `.unit-toggle-sm` (M/F/L, 28px buttons) sits inline with the
+  generic "Distance" label via `.dist-unit-row` (right above the input field(s), not
+  its own separate "Unit" row — deliberately much smaller than the app's other toggles
+  since it's a secondary control, not a primary input) and lets you enter a leg's
+  distance in Metres, Feet & Inches (two separate fields — no compound-decimal
+  encoding, avoids the ambiguity a single "12.6" field would have), or Links.
+  **`state.legs[].dist` is always metres** — the selected unit only changes what the
+  entry field(s) accept; `saveLeg()` converts via `readDistInputAsMeters()` before
+  storing, so every other calculation and display in the app (closure, adjustment,
+  area, tables) is completely unaffected and stays in metres. `editLeg()` uses
+  `setDistInputsFromMeters()` to populate the field(s) in whichever unit is *currently*
+  selected, converting back from the stored metres value. The toggle+field(s) live in
+  their own `#dist-section-container` fragment (`renderDistSection()`), regenerated in
+  place by `setDistUnit()` rather than through a full `render()` — this specifically
+  avoids wiping out an in-progress Bearing entry, which a full re-render would do since
+  the Bearing field isn't bound to `state` (see the no-virtual-DOM note above).
+  Conversion constants (`FEET_TO_M`, `LINK_TO_M`, `PERCH_TO_M2`) live once near the top
+  of SURVEY MATH and are shared with the Convert tab below.
 - **±90° bearing buttons** (`adjustBearing90(sign)`, just below the bearing preview):
   rotates whatever bearing is currently in `#in-bearing` by ±90° (wrapping 0–360°)
   instead of requiring it to be retyped from scratch — handy for quickly turning a
@@ -117,6 +117,13 @@ update the live site.
   `updateCompassNeedle()` to refresh the preview text and needle, matching what live
   typing does. Flashes an error rather than silently no-op'ing if the bearing field is
   empty/incomplete when pressed.
+- **Blank Bearing/Distance repeats the previous leg** (`saveLeg()`, add mode only — not
+  while editing an existing leg): leaving Bearing empty reuses the last saved leg's
+  bearing, leaving Distance empty reuses its distance (in metres, regardless of the
+  currently selected entry unit) — each field falls back independently, so you can
+  repeat just one of the two. Common in the field for a run of legs sharing a bearing,
+  or a series of equal-length offsets. `isDistInputEmpty()` checks whichever unit's
+  field(s) are currently shown.
 
 **Closure tab**
 - Summary stats, in this order: Linear Misclose, Misclose Bearing, Perimeter, Precision Ratio.
@@ -165,46 +172,61 @@ update the live site.
 - User-set starting N/E. Full coordinate table + SVG grid-paper-style plot of the adjusted
   traverse loop.
 
-**Calculator tab** (formerly "Missing Line") — 5 modes: a 2×2 toggle grid plus one
-full-width button below it for the most recently added tool. **Every tool here uses
-the traverse's raw (as-measured) legs, never the adjusted ones** — see the "Calculator
-tab uses raw legs, not adjusted" note below; this is a firm rule for this tab, not just
-incidental to how it's built today.
+**Calculator tab** (formerly "Missing Line") — 4 modes in a 2×2 toggle grid (the old
+5th full-width Offset/Chainage slot was removed entirely, per request, not kept as a
+toggle — reintroduce a stakeout tool if that direction turns out to be needed again).
+**Every tool here uses the traverse's raw (as-measured) legs, never the adjusted
+ones** — see the "Calculator tab uses raw legs, not adjusted" note below; this is a
+firm rule for this tab, not just incidental to how it's built today.
 1. Inverse (2 Pts) — bearing/distance between two known N/E coordinates.
-2. 2 Missing Distances (`renderTwoMissingDistances()`/`computeTwoMissingDistances()`) —
-   given all legs currently on the Traverse tab as known sides, plus two more sides of
-   known bearing but unknown distance, solves both missing distances so the loop
-   closes. A 2×2 linear system (Cramer's rule): with known-sum `(sumLat, sumDep)` and
-   the two bearings' `(cos,sin)` pairs, `det = cosX·sinY − cosY·sinX` (zero means the
-   bearings are parallel/opposite — flashes an error rather than dividing by ~0).
-   Verified: the solved distances satisfy the closure equations exactly (to
-   floating-point noise, ~1e-15) when plugged back in. A negative result is shown
-   as-is with a note that it likely means one bearing needs reversing (±180°), rather
-   than silently flipping it — that's a real signal the input may be wrong, not
-   something to paper over. Replaced the old "Closing Leg" mode (which solved for one
-   unknown side, both bearing and distance) in the same grid slot — that was a special
-   case of this being a genuine generalization, not just a rename; `computeClosingLeg()`
-   itself is untouched and still backs the Traverse tab's own live panel.
-3. Radiations — bearing/distance between two points each defined by bearing+distance
-   ("radiated") from the same occupied station.
+2. 2 Missing Distances (`renderTwoMissingDistances()`/`computeTwoMissingDistances()`)
+   — solves the two missing side lengths of a triangle A–B–C: side A→B is fully known
+   (two points, each with the traverse point picker), and the bearings from A and from
+   B toward the third point C are known, but AC and BC are not — the standard
+   "resection by two bearings" problem. A 2×2 linear system (Cramer's rule) from
+   `C = A + AC·(cosθAC,sinθAC) = B + BC·(cosθBC,sinθBC)`; `det = sin(θAC − θBC)` (zero
+   means the two bearings are parallel — flashes an error rather than dividing by ~0).
+   Also returns point C's coordinates as a bonus. Verified against a hand-constructed
+   triangle (A=(0,0), B=(0,100), C=(80,40)): feeding in the bearings/distances computed
+   independently via `inverse()` recovers AC, BC, and point C exactly. A negative
+   distance result is shown as-is with a note that it likely means one bearing needs
+   reversing (±180°), rather than silently flipping it — that's a real signal the input
+   may be wrong, not something to paper over.
+   This mode used to solve for one unmeasured side of the *current Traverse-tab legs*
+   (a generalization of the old "Closing Leg" mode) rather than a self-contained
+   triangle with its own two named points — it was redone specifically so the inputs
+   are exactly the data needed to solve the stated problem, not an implicit dependency
+   on whatever happens to be entered on the Traverse tab. `computeClosingLeg()` itself
+   is untouched and still backs the Traverse tab's own live panel.
+3. Eccentric (renamed from "Radiations") — bearing/distance between two points each
+   defined by bearing+distance ("radiated"/eccentric) from the same occupied station.
+   Internal identifiers renamed to match (`renderEccentric()`/`computeEccentric()`,
+   field IDs `ecc1-*`/`ecc2-*`) — see the calcMode-naming note below.
 4. Bearing Compare — signed angle (**A − B**, not B − A) + turn direction (CW/CCW)
    between two bearings. Turn Direction describes turning from B to A, matching the
    A−B sign convention (flip both together if this ever needs revisiting — the two
    stats must stay paired, or they'll contradict each other).
-5. Offset / Chainage — a stakeout tool: given a baseline (points A→B), a chainage
-   along it, and a left/right offset from it, computes the target point's N/E. See
-   `computeOffset()` — the target is A plus `chainage` along the baseline's unit
-   vector plus the signed offset along its right-perpendicular unit vector
-   `(-dE/L, dN/L)` (derived from, and consistent with, the sign convention verified
-   during development: facing baseline azimuth θ, "right" is azimuth θ+90°). This was
-   originally the reverse calc (P → chainage/offset); it was changed to this stakeout
-   direction and the old mode was dropped, not kept as a toggle, since that's what was
-   asked for — reintroduce it as a toggle if the locate-a-point-on-a-baseline direction
-   turns out to be needed too.
-   Internal identifiers still say `calcMode`/`renderCalculator`/`setCalcMode` (renamed
-   from the old `missingMode`/`renderMissing`/`setMissingMode` together with the UI
-   label) — keep code and UI names in sync here, unlike the intentional lat/dep vs
-   Northing/Easting split elsewhere in this file.
+
+Internal identifiers still say `calcMode`/`renderCalculator`/`setCalcMode` (renamed
+from the old `missingMode`/`renderMissing`/`setMissingMode` together with the UI
+label) — keep code and UI names in sync here, unlike the intentional lat/dep vs
+Northing/Easting split elsewhere in this file. `calcMode` values: `'inverse'`,
+`'twoDist'`, `'eccentric'`, `'compare'` (`'offset'`/`'closing'`/`'radiation'` no
+longer exist).
+
+**Calculator memory (store/recall)** — a single shared scratch register
+(`calcMemory`, module-level, not persisted — consistent with the Calculator tab's
+tools being stateless scratch pads) sits at the top of the Calculator panel: a value
+display (`#calc-memory-value`) + CLEAR button. Every numeric result stat across all
+four tools is tap-to-store (`class="stat storable"` + `onclick="storeToMemory(VALUE)"`
+— stores the underlying decimal value even for bearings displayed as DMS, e.g. the
+Inverse bearing stores `r.az` not the formatted string). Every plain numeric
+(non-bearing) input field uses `numFieldWithRecall(id, label, placeholder)`, which
+renders the input plus a small "M" button (`recallFromMemory(fieldId)`) beside it —
+DMS bearing fields deliberately don't get a recall button, since a decimal memory
+value can't be pasted into that format sensibly. `storeToMemory()`/`recallFromMemory()`
+are single-register (not a full RPN stack) — extend to a stack if that's ever needed,
+but a single register was the simpler, more directly useful starting point.
 
 **Calculator tab uses raw legs, not adjusted.** `computeCoordinates()` (used by the
 Coordinates/Plot tab) builds points from `computeAdjusted()` — i.e. whichever of
@@ -213,23 +235,22 @@ but the Calculator tab's tools must NOT depend on that selection: the adjustment
 Closure-tab reporting choice, not a computational input the rest of the app should
 inherit. `computeRawCoordinates()` (right next to `computeCoordinates()`) is the same
 shape but built from `computeLegVectors()` (raw/as-measured) instead, and is what
-`traversePointOptions()`/`onPointSelect()` use — so Inverse and Offset's point pickers,
-and `computeTwoMissingDistances()`'s known-sum, all reflect the traverse exactly as
-entered, unaffected by the Closure tab's adjustment toggle. If you add a new
-Calculator-tab tool that touches traverse coordinates, use `computeRawCoordinates()`,
-not `computeCoordinates()`.
+`traversePointOptions()`/`onPointSelect()` use — so Inverse's and the triangle tool's
+point pickers all reflect the traverse exactly as entered, unaffected by the Closure
+tab's adjustment toggle. If you add a new Calculator-tab tool that touches traverse
+coordinates, use `computeRawCoordinates()`, not `computeCoordinates()`.
 
-**Traverse point picker** — Inverse and Offset both let any N/E field be filled from
-the traverse's own raw computed coordinates instead of retyped, via a shared trio just
-above `renderOffset()`: `traversePointOptions()` (builds the `<option>` list from
-`computeRawCoordinates()`), `pointPickerHtml(selectId, nFieldId, eFieldId, pointOptions)`
-(renders the `<select>`, wired to call `onPointSelect` with those exact field IDs —
-this is why it drops into any panel unchanged, no ID-naming convention required), and
-`onPointSelect(selectEl, nFieldId, eFieldId)` (fills + read-only-locks the two fields,
-or unlocks them again on "Custom"). If you add a point picker to another calculator,
-reuse this trio rather than duplicating it — it was originally Offset-only
-(`offsetPointOptions()`/`onOffsetPointSelect()`) and got generalized here specifically
-so Inverse could reuse it.
+**Traverse point picker** — Inverse and the triangle tool (2 Missing Distances) both
+let any N/E field be filled from the traverse's own raw computed coordinates instead
+of retyped, via a shared trio just above `renderInverse()`: `traversePointOptions()`
+(builds the `<option>` list from `computeRawCoordinates()`), `pointPickerHtml(selectId,
+nFieldId, eFieldId, pointOptions)` (renders the `<select>`, wired to call
+`onPointSelect` with those exact field IDs — this is why it drops into any panel
+unchanged, no ID-naming convention required), and `onPointSelect(selectEl, nFieldId,
+eFieldId)` (fills + read-only-locks the two fields, or unlocks them again on
+"Custom"). If you add a point picker to another calculator, reuse this trio rather
+than duplicating it — it was originally Offset-only (a mode since removed) and got
+generalized so Inverse and the triangle tool could reuse it.
 
 **Convert tab** — standalone one-way unit converters (imperial/chain-survey → metric
 only, no reverse direction, since that's what was asked for), stateless scratch pads
